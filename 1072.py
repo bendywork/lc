@@ -1,7 +1,9 @@
 from collections import defaultdict
 from typing import List
 
-
+# 861 翻转矩阵后的得分
+# 1338
+# 890
 class Solution:
     def maxEqualRowsAfterFlips(self, matrix: List[List[int]]) -> int:
         # 处理边界情况：如果矩阵为空，或只有一行，直接返回行数
