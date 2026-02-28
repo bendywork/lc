@@ -1,3 +1,6 @@
+from collections import defaultdict
+
+
 class Test:
     def test(self, str):
         # for s in str:
@@ -9,6 +12,11 @@ if __name__ == '__main__':
     # s = Test()
     # s.test("abc")
     a = [1,1,1,1,2,3,4,5]
-    dict = {i-1:i for i in a}
+    # dict = {i-1:i for i in a}
     # print(set(a))
-    print(dict)
+    # print(dict)
+    prefix = defaultdict(int)
+    print(prefix[10])
+    print(prefix[11])
+    print(prefix[1])
+    print(prefix[12])
