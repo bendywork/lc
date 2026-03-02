@@ -45,3 +45,14 @@ if __name__ == '__main__':
     digits = [str(random.randint(2, 9)) for _ in range(random.randint(1, 10))][:random.randint(3, 4)]
     print(digits)
     print(Solution().letterCombinations("".join(digits)))
+
+
+# def dfs(index):
+#     if index == len(digits):
+#         收集答案
+#         return
+#
+#     for 每个可能字母:
+#         选择
+#         dfs(index+1)
+#         撤销

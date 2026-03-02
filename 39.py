@@ -30,3 +30,16 @@ class Solution:
 
         dfs(0, target)
         return res
+
+
+# def dfs(start, remaining):
+#     if remaining == 0:
+#         收集
+#         return
+#
+#     for i in range(start, len(nums)):
+#         if nums[i] > remaining:
+#             break
+#         选择
+#         dfs(i, remaining - nums[i])
+#         撤销
