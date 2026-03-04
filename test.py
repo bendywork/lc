@@ -8,6 +8,8 @@ class Test:
         val = sum([ord(s) for s in str])
         print(val)
 
+
+
 if __name__ == '__main__':
     # s = Test()
     # s.test("abc")
@@ -15,8 +17,24 @@ if __name__ == '__main__':
     # dict = {i-1:i for i in a}
     # print(set(a))
     # print(dict)
-    prefix = defaultdict(int)
-    print(prefix[10])
-    print(prefix[11])
-    print(prefix[1])
-    print(prefix[12])
+    # prefix = defaultdict(int)
+    # print(prefix[10])
+    # print(prefix[11])
+    # print(prefix[1])
+    # print(prefix[12])
+    path = []
+
+
+    def dfs():
+        print("进入:", path)
+
+        if len(path)  == 2:
+            return
+
+        for num in [1, 2]:
+            path.append(num)
+            dfs()
+            path.pop()
+
+
+    dfs()
