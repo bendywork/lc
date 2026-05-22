@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>114 - 二叉树展开为链表</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{color:#e94560;font-size:24px;margin-bottom:10px}
+#canvas{border:1px solid #333;border-radius:8px;background:#16213e}
+.controls{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap;justify-content:center}
+.controls button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:background .2s}
+.controls button:hover{background:#c73a52}
+#stepInfo{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;min-height:80px;margin-top:10px}
+#stepInfo h3{color:#16c79a;margin-bottom:6px}
+#stepInfo p{line-height:1.6}
+.highlight{color:#e94560;font-weight:bold}
+#listPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#listPanel h3{color:#16c79a;margin-bottom:6px}
+.list-items{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.list-item{background:#16c79a;color:#1a1a2e;padding:4px 10px;border-radius:4px;font-size:13px;font-weight:bold}
+.list-arrow{color:#888;font-size:16px}
+</style>
+</head>
+<body>
+<h1>114 - 二叉树展开为链表</h1>
+<canvas id="canvas" width="780" height="420"></canvas>
+<div class="controls">
+<button id="btnReset">⏮ 重置</button>
+<button id="btnPrev">⏪ 步骤后退</button>
+<button id="btnPlay">▶ 播放</button>
+<button id="btnNext">步骤前进 ⏩</button>
+</div>
+<div id="stepInfo"><h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p></div>
+<div id="listPanel"><h3>链表结构</h3><div class="list-items" id="listItems"></div></div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=780,H=420;
+const origTree={val:1,left:{val:2,left:{val:3,left:null,right:null},right:{val:4,left:null,right:null}},right:{val:5,left:null,right:{val:6,left:null,right:null}}};
+const steps=[];
+function genSteps(root){
+  let cur=root;
+  while(cur){
+    if(cur.left){
+      const rightmost=findRightmost(cur.left);
+      steps.push({type:'findRightmost',val:cur.val,rightmostVal:rightmost.val,desc:`节点 ${cur.val} 有左子树，找到左子树的最右节点 ${rightmost.val}`,tree:JSON.parse(JSON.stringify(root))});
+      rightmost.right=cur.right;
+      steps.push({type:'reconnect',val:cur.val,rightmostVal:rightmost.val,desc:`将 ${cur.val} 的右子树接到 ${rightmost.val} 的右指针`,tree:JSON.parse(JSON.stringify(root))});
+      cur.right=cur.left;cur.left=null;
+      steps.push({type:'flatten',val:cur.val,desc:`将 ${cur.val} 的左子树移到右侧，左指针置空`,tree:JSON.parse(JSON.stringify(root))});
+    }
+    cur=cur.right;
+    if(cur)steps.push({type:'next',val:cur.val,desc:`向右移动，处理节点 ${cur.val}`,tree:JSON.parse(JSON.stringify(root))});
+  }
+  steps.push({type:'done',desc:'展开完成！所有左子树已移至右侧',tree:JSON.parse(JSON.stringify(root))});
+}
+function findRightmost(node){while(node.right)node=node.right;return node;}
+genSteps(origTree);
+// assign positions for tree at each step
+function assignPos(tree,x,y,spread,posMap){
+  if(!tree)return;posMap[tree.val]={x,y};
+  assignPos(tree.left,x-spread,y+60,spread/2,posMap);
+  assignPos(tree.right,x+spread,y+60,spread/2,posMap);
+}
+function drawTree(tree){
+  const posMap={};assignPos(tree,390,50,140,posMap);
+  function drawEdges(n){if(!n)return;const p=posMap[n.val];
+    if(n.left){const q=posMap[n.left.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#16c79a';ctx.lineWidth=2;ctx.stroke();drawEdges(n.left);}
+    if(n.right){const q=posMap[n.right.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawEdges(n.right);}
+  }
+  function drawNodes(n,curVal){
+    if(!n)return;const p=posMap[n.val];const isCur=n.val===curVal;
+    ctx.beginPath();ctx.arc(p.x,p.y,22,0,Math.PI*2);
+    if(isCur){ctx.fillStyle='#e94560';ctx.shadowColor='#e94560';ctx.shadowBlur=15;}
+    else{ctx.fillStyle='#0f3460';ctx.shadowBlur=0;}
+    ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle=isCur?'#e94560':'#444';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(n.val,p.x,p.y);
+    drawNodes(n.left,curVal);drawNodes(n.right,curVal);
+  }
+  drawEdges(tree);drawNodes(tree,steps[curStep]?steps[curStep].val:null);
+}
+let curStep=-1,playing=false,timer=null;
+function getLinkedList(tree){
+  const result=[];let cur=tree;
+  while(cur){result.push(cur.val);cur=cur.right;}
+  return result;
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  if(s&&s.tree)drawTree(s.tree);
+}
+function renderUI(){
+  draw();const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  const infoEl=document.getElementById('stepInfo');
+  if(s){const tl={findRightmost:'找最右节点',reconnect:'重连右子树',flatten:'移左至右',next:'移动指针',done:'完成'};
+  infoEl.innerHTML=`<h3>步骤 ${curStep+1} / ${steps.length} — <span class="highlight">${tl[s.type]||s.type}</span></h3><p>${s.desc}</p>`;}
+  else infoEl.innerHTML=`<h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p>`;
+  const li=document.getElementById('listItems');
+  if(s&&s.tree){
+    const list=getLinkedList(s.tree);
+    li.innerHTML=list.map((v,i)=>(i>0?'<span class="list-arrow">→</span>':'')+`<span class="list-item">${v}</span>`).join('');
+  }else li.innerHTML='';
+}
+function stepForward(){if(curStep<steps.length-1){curStep++;renderUI();}else stopPlay();}
+function stepBack(){if(curStep>=0){curStep--;renderUI();}}
+function resetAnim(){stopPlay();curStep=-1;renderUI();}
+function startPlay(){if(playing)return;playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)stepForward();else stopPlay();},900);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+document.getElementById('btnPlay').onclick=()=>{if(playing)stopPlay();else startPlay();};
+document.getElementById('btnNext').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btnPrev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btnReset').onclick=resetAnim;
+renderUI();
+</script>
+</body>
+</html>

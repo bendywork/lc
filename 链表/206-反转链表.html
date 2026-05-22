@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeetCode 206 - 反转链表</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{margin:20px 0 10px;font-size:24px;color:#e94560}
+.subtitle{color:#888;font-size:14px;margin-bottom:15px}
+.canvas-wrap{border:1px solid #333;border-radius:8px;overflow:hidden}
+canvas{display:block}
+.controls{display:flex;gap:10px;margin:15px 0;flex-wrap:wrap;justify-content:center}
+.btn{background:#16213e;border:1px solid #e94560;color:#e94560;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit;transition:all .2s}
+.btn:hover{background:#e94560;color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.step-info{background:#16213e;border:1px solid #333;border-radius:8px;padding:15px 20px;max-width:920px;width:90%;margin-bottom:20px}
+.step-counter{color:#16c79a;font-size:14px;margin-bottom:8px}
+.step-desc{color:#ddd;font-size:15px;line-height:1.6}
+.legend{display:flex;gap:20px;margin:10px 0;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:13px;color:#aaa}
+.legend-dot{width:14px;height:14px;border-radius:3px}
+</style>
+</head>
+<body>
+<h1>206. 反转链表</h1>
+<p class="subtitle">给你单链表的头节点 head，请你反转链表，并返回反转后的链表。经典三指针法：prev、curr、next。</p>
+<div class="legend">
+<div class="legend-item"><div class="legend-dot" style="background:#4fc3f7"></div>curr当前</div>
+<div class="legend-item"><div class="legend-dot" style="background:#16c79a"></div>prev已反转</div>
+<div class="legend-item"><div class="legend-dot" style="background:#ffb74d"></div>next待处理</div>
+<div class="legend-item"><div class="legend-dot" style="background:#e94560"></div>翻转箭头</div>
+</div>
+<div class="canvas-wrap"><canvas id="canvas" width="920" height="480"></canvas></div>
+<div class="controls">
+<button class="btn" onclick="resetAnim()">⏮ 重置</button>
+<button class="btn" id="btnPrev" onclick="stepPrev()">◀ 步骤后退</button>
+<button class="btn" id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button class="btn" id="btnNext" onclick="stepNext()">步骤前进 ▶</button>
+</div>
+<div class="step-info">
+<div class="step-counter" id="stepCounter">步骤 0 / 0</div>
+<div class="step-desc" id="stepDesc">点击"播放"或"步骤前进"开始动画</div>
+</div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=920,H=480;
+const list=[1,2,3,4,5];
+const NW=60,NH=40,NGAP=34;
+const sx=80,ly=260;
+function buildSteps(){
+  const steps=[];
+  steps.push({prevIdx:-1,currIdx:0,nextIdx:1,arr:[...list],phase:'init',desc:'初始链表：1→2→3→4→5，prev=null，curr=1，next=2'});
+  let prev=-1,curr=0;
+  while(curr<list.length){
+    const next=curr+1;
+    steps.push({prevIdx:prev,currIdx:curr,nextIdx:next<list.length?next:-1,arr:[...list],phase:'save',desc:`保存next指针：next=${next<list.length?list[next]:'null'}`});
+    steps.push({prevIdx:prev,currIdx:curr,nextIdx:next<list.length?next:-1,arr:[...list],phase:'reverse',desc:`反转：${list[curr]}.next指向${prev>=0?list[prev]:'null'}，断开原方向`});
+    prev=curr;curr=next;
+    steps.push({prevIdx:prev,currIdx:curr<list.length?curr:-1,nextIdx:curr+1<list.length?curr+1:-1,arr:[...list],phase:'advance',desc:`前进：prev=${list[prev]}，curr=${curr<list.length?list[curr]:'null'}，next=${curr+1<list.length?list[curr+1]:'null'}`});
+  }
+  steps.push({prevIdx:prev,currIdx:-1,nextIdx:-1,arr:[...list].reverse(),phase:'done',desc:`完成！反转后链表：${[...list].reverse().join('→')}，新头节点=${list[list.length-1]}`});
+  return steps;
+}
+const steps=buildSteps();
+let curStep=-1,playing=false,timer=null;
+function roundRect(x,y,w,h,r,fill,stroke){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();if(fill)ctx.fill();if(stroke)ctx.stroke();
+}
+function drawArrow(x1,y1,x2,y2,color,dashed){
+  ctx.strokeStyle=color||'#666';ctx.lineWidth=2;if(dashed)ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();if(dashed)ctx.setLineDash([]);
+  const a=Math.atan2(y2-y1,x2-x1),sz=7;ctx.fillStyle=color||'#666';ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-sz*Math.cos(a-Math.PI/6),y2-sz*Math.sin(a-Math.PI/6));
+  ctx.lineTo(x2-sz*Math.cos(a+Math.PI/6),y2-sz*Math.sin(a+Math.PI/6));ctx.closePath();ctx.fill();
+}
+function drawCurvedArrow(x1,y1,x2,y2,color,down){
+  ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.setLineDash([6,3]);ctx.beginPath();
+  ctx.moveTo(x1,y1);ctx.quadraticCurveTo((x1+x2)/2,down?y1+50:y1-50,x2,y2);ctx.stroke();ctx.setLineDash([]);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,W,H);
+  const s=curStep>=0?steps[curStep]:steps[0];
+  if(s.phase==='done'){
+    const arr=s.arr;
+    for(let i=0;i<arr.length;i++){
+      const x=sx+i*(NW+NGAP);
+      ctx.fillStyle='#16c79a';ctx.strokeStyle='#16c79a';ctx.lineWidth=2.5;
+      roundRect(x,ly,NW,NH,6,true,true);
+      ctx.fillStyle='#fff';ctx.font='bold 18px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(arr[i],x+NW/2,ly+NH/2);
+      if(i<arr.length-1)drawArrow(x+NW+2,ly+NH/2,x+NW+NGAP-2,ly+NH/2,'#16c79a');
+    }
+    ctx.textAlign='start';ctx.textBaseline='alphabetic';return;
+  }
+  for(let i=0;i<list.length;i++){
+    const x=sx+i*(NW+NGAP);
+    let color='#2a2a4a',borderColor='#555';
+    if(i===s.currIdx){color='#4fc3f7';borderColor='#4fc3f7';}
+    else if(i<=s.prevIdx&&s.prevIdx>=0){color='#16c79a';borderColor='#16c79a';}
+    else if(i===s.nextIdx){borderColor='#ffb74d';}
+    const hl=i===s.currIdx||(i<=s.prevIdx&&s.prevIdx>=0);
+    ctx.fillStyle=color;ctx.strokeStyle=borderColor;ctx.lineWidth=hl?2.5:1.5;
+    roundRect(x,ly,NW,NH,6,true,true);
+    ctx.fillStyle=hl?'#fff':'#ccc';ctx.font='bold 18px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(list[i],x+NW/2,ly+NH/2);
+    if(i===s.currIdx){ctx.font='bold 12px Microsoft YaHei';ctx.fillStyle='#4fc3f7';ctx.fillText('curr',x+NW/2,ly-14);}
+    if(i===s.prevIdx){ctx.font='bold 12px Microsoft YaHei';ctx.fillStyle='#16c79a';ctx.fillText('prev',x+NW/2,ly-14);}
+    if(i===s.nextIdx){ctx.font='bold 12px Microsoft YaHei';ctx.fillStyle='#ffb74d';ctx.fillText('next',x+NW/2,ly+NH+16);}
+  }
+  if(s.prevIdx===-1){
+    ctx.font='bold 12px Microsoft YaHei';ctx.fillStyle='#16c79a';ctx.textAlign='center';
+    ctx.fillText('prev=null',sx+NW/2,ly-14);
+  }
+  for(let i=0;i<list.length-1;i++){
+    const x1=sx+i*(NW+NGAP)+NW+2,x2=sx+(i+1)*(NW+NGAP)-2;
+    if(i<s.currIdx){
+      drawArrow(x1,ly+NH/2,x2,ly+NH/2,'#16c79a');
+    } else if(i===s.currIdx&&s.phase==='reverse'){
+      if(s.prevIdx>=0){
+        const px2=sx+s.prevIdx*(NW+NGAP)+NW/2;
+        drawCurvedArrow(sx+s.currIdx*(NW+NGAP)+NW/2,ly+NH,px2,ly+NH,'#e94560',true);
+      }
+    } else {
+      drawArrow(x1,ly+NH/2,x2,ly+NH/2,'#555');
+    }
+  }
+  if(s.phase==='reverse'&&s.prevIdx>=0){
+    const px1=sx+s.currIdx*(NW+NGAP)+NW/2;
+    const px2=sx+s.prevIdx*(NW+NGAP)+NW/2;
+    drawCurvedArrow(px1,ly+NH,px2,ly+NH,'#e94560',true);
+  }
+  ctx.textAlign='start';ctx.textBaseline='alphabetic';
+}
+function updateUI(){
+  document.getElementById('stepCounter').textContent=`步骤 ${curStep+1} / ${steps.length}`;
+  document.getElementById('stepDesc').textContent=curStep>=0?steps[curStep].desc:'点击"播放"或"步骤前进"开始动画';
+  document.getElementById('btnPrev').disabled=curStep<=0;
+  document.getElementById('btnNext').disabled=curStep>=steps.length-1;
+}
+function stepNext(){if(curStep<steps.length-1){curStep++;draw();updateUI();}else stopPlay();}
+function stepPrev(){if(curStep>0){curStep--;draw();updateUI();}}
+function togglePlay(){playing?stopPlay():startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{curStep<steps.length-1?stepNext():stopPlay()},1200);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);}
+function resetAnim(){stopPlay();curStep=-1;draw();updateUI();}
+draw();updateUI();
+</script>
+</body>
+</html>

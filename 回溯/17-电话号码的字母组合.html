@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>17-电话号码的字母组合</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:300px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+canvas{display:block;margin:0 auto;background:#0f3460;border-radius:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.highlight{color:#e94560;font-weight:bold}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.key{background:#0f3460;border-radius:6px;padding:6px;text-align:center;font-size:12px;color:#aaa}
+.key-num{font-size:16px;color:#e94560;font-weight:bold}
+.key-chars{font-size:10px;color:#16c79a}
+.combo-display{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.combo-tag{background:#0f3460;color:#16c79a;padding:3px 8px;border-radius:4px;font-size:12px;font-family:monospace}
+.combo-tag.current{background:#e94560;color:#fff}
+</style>
+</head>
+<body>
+<h1>17 - 电话号码的字母组合</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">DFS 递归树探索</div>
+<canvas id="treeCanvas" width="560" height="420"></canvas>
+</div>
+<div class="panel">
+<div class="panel-title">电话键盘 & 结果</div>
+<div class="keypad" id="keypad"></div>
+<div style="margin-top:12px">
+<div style="color:#aaa;font-size:13px;margin-bottom:4px">当前输入 digits:</div>
+<div id="digitsDisplay" style="color:#e94560;font-size:18px;font-family:monospace;font-weight:bold">"23"</div>
+</div>
+<div style="margin-top:12px">
+<div style="color:#aaa;font-size:13px;margin-bottom:4px">当前组合:</div>
+<div id="currentPath" style="color:#16c79a;font-size:18px;font-family:monospace;font-weight:bold">-</div>
+</div>
+<div style="margin-top:12px">
+<div style="color:#aaa;font-size:13px;margin-bottom:4px">所有组合:</div>
+<div class="combo-display" id="comboDisplay"></div>
+</div>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const KEYPAD={
+'2':'abc','3':'def','4':'ghi','5':'jkl','6':'mno','7':'pqrs','8':'tuv','9':'wxyz'
+};
+const canvas=document.getElementById('treeCanvas');
+const ctx=canvas.getContext('2d');
+const digits="23";
+let steps=[];
+let currentStep=0;
+let playing=false;
+let timer=null;
+
+function buildKeypad(){
+  const el=document.getElementById('keypad');
+  el.innerHTML='';
+  for(let n=1;n<=9;n++){
+    const k=n.toString();
+    const chars=KEYPAD[k]||'';
+    el.innerHTML+=`<div class="key"><div class="key-num">${k}</div><div class="key-chars">${chars}</div></div>`;
+  }
+}
+buildKeypad();
+
+function generateSteps(){
+  steps=[];
+  const letters=digits.split('').map(d=>KEYPAD[d]);
+  const tree=[];
+  let nodeId=0;
+  function dfs(idx,path,nodes,parent,depth){
+    const id=nodeId++;
+    const node={id,path,idx,depth,children:[],parent,result:false};
+    nodes.push(node);
+    if(parent!==null)tree.find(n=>n.id===parent).children.push(id);
+    if(idx===digits.length){
+      node.result=true;
+      steps.push({type:'leaf',path,nodes:[...nodes],nodeId:id,desc:`到达叶子节点，组合 "${path}" 完成`});
+      return;
+    }
+    const ch=letters[idx];
+    for(let i=0;i<ch.length;i++){
+      steps.push({type:'explore',path:path+ch[i],idx:idx+1,nodes:[...nodes],nodeId:id,char:ch[i],charIdx:i,
+        desc:`选择 digit="${digits[idx]}" 的第 ${i+1} 个字母 '${ch[i]}'，路径变为 "${path+ch[i]}"`});
+      dfs(idx+1,path+ch[i],nodes,id,depth+1);
+    }
+    steps.push({type:'backtrack',path,idx,nodes:[...nodes],nodeId:id,
+      desc:`回溯：digit="${digits[idx]}" 的所有字母已探索完毕，返回上一层`});
+  }
+  steps.push({type:'start',path:'',idx:0,nodes:[],nodeId:null,desc:'开始DFS搜索，digits="'+digits+'"'});
+  dfs(0,'',tree,null,0);
+  steps.push({type:'done',path:'',idx:digits.length,nodes:[],nodeId:null,desc:`搜索完成，共找到 ${Math.pow(1,digits.length)}... 个组合`});
+  const total=letters.reduce((a,b)=>a*b.length,1);
+  steps[steps.length-1].desc=`搜索完成，共找到 ${total} 个组合`;
+}
+
+function layoutNodes(nodes){
+  const positions={};
+  const leaves=[];
+  function countLeaves(node){
+    if(node.children.length===0){leaves.push(node.id);return 1;}
+    return node.children.reduce((s,cid)=>s+countLeaves(nodes.find(n=>n.id===cid)),0);
+  }
+  if(nodes.length>0)countLeaves(nodes[0]);
+  const leafWidth=70;
+  const totalW=leaves.length*leafWidth;
+  const startX=Math.max(30,(560-totalW)/2);
+  const leafMap={};
+  leaves.forEach((lid,i)=>leafMap[lid]=startX+i*leafWidth+leafWidth/2);
+  function pos(node){
+    if(node.children.length===0){
+      positions[node.id]={x:leafMap[node.id]||280,y:50+node.depth*70};
+      return positions[node.id].x;
+    }
+    let sum=0;
+    node.children.forEach(cid=>{
+      const cn=nodes.find(n=>n.id===cid);
+      if(cn)sum+=pos(cn);
+    });
+    const avg=sum/node.children.length;
+    positions[node.id]={x:avg,y:50+node.depth*70};
+    return avg;
+  }
+  if(nodes.length>0)pos(nodes[0]);
+  return positions;
+}
+
+function drawTree(step){
+  ctx.clearRect(0,0,560,420);
+  if(!step||!step.nodes||step.nodes.length===0){
+    ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';
+    ctx.fillText('等待开始...',220,200);
+    return;
+  }
+  const nodes=step.nodes;
+  const pos=layoutNodes(nodes);
+  nodes.forEach(node=>{
+    const p=pos[node.id];
+    if(!p)return;
+    node.children.forEach(cid=>{
+      const cp=pos[cid];
+      if(!cp)return;
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(cp.x,cp.y);
+      ctx.strokeStyle='#333';ctx.lineWidth=1.5;ctx.stroke();
+    });
+  });
+  nodes.forEach(node=>{
+    const p=pos[node.id];
+    if(!p)return;
+    const isCurrent=step.nodeId===node.id;
+    const isResult=node.result;
+    const isOnPath=step.path&&node.path&&step.path.startsWith(node.path)&&step.path.length>=node.path.length;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,isCurrent?20:15,0,Math.PI*2);
+    ctx.fillStyle=isCurrent?'#e94560':isOnPath?'#16c79a':isResult?'#0f3460':'#16213e';
+    ctx.fill();
+    ctx.strokeStyle=isCurrent?'#e94560':isOnPath?'#16c79a':'#555';
+    ctx.lineWidth=isCurrent?2.5:1;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(node.path||'root',p.x,p.y);
+  });
+}
+
+function updateUI(step){
+  if(!step)return;
+  document.getElementById('currentPath').textContent=step.path||'-';
+  const combos=document.getElementById('comboDisplay');
+  if(step.type==='leaf'){
+    const tag=document.createElement('span');
+    tag.className='combo-tag current';tag.textContent=step.path;
+    combos.appendChild(tag);
+  }else{
+    const tags=combos.querySelectorAll('.combo-tag.current');
+    tags.forEach(t=>t.classList.remove('current'));
+  }
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  drawTree(step);
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){
+  if(currentStep>=steps.length-1)reset();
+  playing=true;
+  document.getElementById('btnPlay').disabled=true;
+  document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;
+  document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{
+    if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+    else pause();
+  },800);
+}
+function pause(){
+  playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;
+  document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;
+  document.getElementById('btnPrev').disabled=currentStep<=0;
+}
+function reset(){
+  pause();currentStep=0;
+  document.getElementById('comboDisplay').innerHTML='';
+  document.getElementById('currentPath').textContent='-';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  ctx.clearRect(0,0,560,420);
+  ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,200);
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;
+  document.getElementById('btnNext').disabled=false;
+  generateSteps();
+}
+function nextStep(){
+  if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;
+}
+function prevStep(){
+  if(currentStep>0){
+    currentStep--;
+    document.getElementById('comboDisplay').innerHTML='';
+    for(let i=0;i<=currentStep;i++){
+      if(steps[i].type==='leaf'){
+        const tag=document.createElement('span');
+        tag.className='combo-tag';tag.textContent=steps[i].path;
+        document.getElementById('comboDisplay').appendChild(tag);
+      }
+    }
+    updateUI(steps[currentStep]);
+  }
+  document.getElementById('btnPrev').disabled=currentStep<=0;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;
+}
+
+generateSteps();
+ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,200);
+</script>
+</body>
+</html>

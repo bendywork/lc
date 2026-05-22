@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>11 - 盛最多水的容器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:800px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:500px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+.controls button:disabled{opacity:.4;cursor:default}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>11 - 盛最多水的容器</h1>
+<p id="desc">给定 n 个非负整数，表示柱子高度，选择两根柱子使其与 x 轴构成的容器能容纳最多的水。双指针从两端向内收缩，每次移动较短的那根。</p>
+<canvas id="cv" width="800" height="400"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button id="btnReset" onclick="reset()">⏮ 重置</button>
+<button id="btnPrev" onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button id="btnNext" onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="800" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#e94560"></span>左指针</span>
+<span><span class="dot" style="background:#16c79a"></span>右指针</span>
+<span><span class="dot" style="background:#5344a8"></span>当前区域</span>
+<span><span class="dot" style="background:#1a8fdd"></span>水面</span>
+<span><span class="dot" style="background:#ffd700"></span>最大区域</span>
+</div>
+<script>
+const heights=[1,8,6,2,5,4,8,3,7];
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  let l=0,r=heights.length-1,maxArea=0,maxL=0,maxR=0;
+  steps.push({l,r,maxArea,maxL,maxR,desc:'初始化：左指针 = 0，右指针 = '+r+'，最大面积 = 0',moved:-1});
+  while(l<r){
+    const w=r-l,h=Math.min(heights[l],heights[r]),area=w*h;
+    if(area>maxArea){maxArea=area;maxL=l;maxR=r;}
+    steps.push({l,r,maxArea,maxL,maxR,desc:`计算面积：width(${r}-${l})=${w} × min(${heights[l]},${heights[r]})=${h} = ${area}`,moved:-1,curArea:area});
+    if(heights[l]<heights[r]){
+      steps.push({l,r,maxArea,maxL,maxR,desc:`height[${l}]=${heights[l]} < height[${r}]=${heights[r]}，左指针右移 → ${l+1}`,moved:'l',curArea:area});
+      l++;
+    }else{
+      steps.push({l,r,maxArea,maxL,maxR,desc:`height[${r}]=${heights[r]} ≤ height[${l}]=${heights[l]}，右指针左移 → ${r-1}`,moved:'r',curArea:area});
+      r--;
+    }
+  }
+  steps.push({l,r,maxArea,maxL,maxR,desc:`循环结束。最大面积 = ${maxArea}（height[${maxL}]=${heights[maxL]} × height[${maxR}]=${heights[maxR]}，宽度${maxR-maxL}）`,moved:-1,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const barW=50,gap=10,totalW=heights.length*(barW+gap)-gap;
+const offsetX=(W-totalW)/2,maxH=250,baseY=H-60;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{l:0,r:heights.length-1,maxArea:0,maxL:0,maxR:0,moved:-1}:steps[cur];
+  // max area region
+  if(s.maxArea>0){
+    const x1=offsetX+s.maxL*(barW+gap),x2=offsetX+s.maxR*(barW+gap)+barW;
+    ctx.fillStyle='rgba(255,215,0,0.08)';
+    ctx.fillRect(x1,baseY-maxH,x2-x1,maxH);
+  }
+  // current area
+  if(!s.final){
+    const x1=offsetX+s.l*(barW+gap),x2=offsetX+s.r*(barW+gap)+barW;
+    ctx.fillStyle='rgba(83,68,168,0.18)';
+    ctx.fillRect(x1,baseY-maxH,x2-x1,maxH);
+    // water level
+    const waterH=Math.min(heights[s.l],heights[s.r])*(maxH/Math.max(...heights));
+    const waterTop=baseY-waterH;
+    ctx.fillStyle='rgba(26,143,221,0.25)';
+    ctx.fillRect(x1,waterTop,x2-x1,baseY-waterTop);
+    // water surface line
+    ctx.strokeStyle='#1a8fdd';ctx.lineWidth=2;ctx.setLineDash([6,3]);
+    ctx.beginPath();ctx.moveTo(x1,waterTop);ctx.lineTo(x2,waterTop);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // bars
+  for(let i=0;i<heights.length;i++){
+    const x=offsetX+i*(barW+gap);
+    const h=heights[i]*(maxH/Math.max(...heights));
+    let color='#3a3a6a';
+    if(i===s.l)color='#e94560';
+    if(i===s.r)color='#16c79a';
+    if(s.final&&i===s.maxL)color='#ffd700';
+    if(s.final&&i===s.maxR)color='#ffd700';
+    ctx.fillStyle=color;
+    ctx.fillRect(x,baseY-h,barW,h);
+    ctx.fillStyle='#aaa';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(heights[i],x+barW/2,baseY-h-8);
+    ctx.fillText(i,x+barW/2,baseY+18);
+  }
+  // pointer arrows
+  if(!s.final||cur===steps.length-1){
+    drawPtr(s.l,'#e94560','L');
+    drawPtr(s.r,'#16c79a','R');
+  }
+  // area label
+  if(s.curArea!==undefined&&!s.final){
+    const midX=(offsetX+s.l*(barW+gap)+offsetX+s.r*(barW+gap)+barW)/2;
+    ctx.fillStyle='#fff';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillText('面积 = '+s.curArea,midX,baseY-maxH-15);
+  }
+  if(s.final&&s.maxArea>0){
+    const midX=(offsetX+s.maxL*(barW+gap)+offsetX+s.maxR*(barW+gap)+barW)/2;
+    ctx.fillStyle='#ffd700';ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+    ctx.fillText('最大面积 = '+s.maxArea,midX,baseY-maxH-15);
+  }
+  // info
+  ctx.fillStyle='#888';ctx.font='13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('最大面积: '+s.maxArea+(s.maxArea>0?' (L='+s.maxL+',R='+s.maxR+')':''),15,25);
+}
+function drawPtr(i,color,label){
+  const x=offsetX+i*(barW+gap)+barW/2;
+  ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x,baseY-maxH-45);ctx.lineTo(x-7,baseY-maxH-33);ctx.lineTo(x+7,baseY-maxH-33);ctx.closePath();ctx.fill();
+  ctx.font='bold 13px sans-serif';ctx.textAlign='center';ctx.fillText(label,x,baseY-maxH-50);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

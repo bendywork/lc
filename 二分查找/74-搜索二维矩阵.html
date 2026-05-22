@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>74-搜索二维矩阵</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:340px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.matrix{display:inline-grid;gap:3px;margin:12px auto;padding:8px;background:#0f3460;border-radius:8px}
+.cell{width:60px;height:50px;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all .3s;font-weight:bold;font-family:monospace}
+.cell .val{font-size:18px;color:#fff}.cell .coord{font-size:9px;color:#aaa}
+.cell.empty{background:#16213e;border:2px solid #333}
+.cell.in-range{background:#16c79a33;border:2px solid #16c79a44}
+.cell.out-range{background:#16213e;border:2px solid #222}
+.cell.row-hl{background:#16c79a22;border:2px solid #16c79a88}
+.cell.found{background:#16c79a88;border:2px solid #16c79a}
+.cell.comparing{background:#ffd70022;border:2px solid #ffd700}
+.cell .row-label{font-size:8px;color:#888}
+.search-info{margin-top:16px;background:#0f3460;border-radius:8px;padding:10px;font-size:13px;line-height:1.8}
+.search-info .key{color:#16c79a;font-weight:bold}.search-info .hl{color:#ffd700}.search-info .red{color:#e94560}
+.phase-label{margin-top:12px;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:bold;text-align:center;display:inline-block}
+.phase1{background:#16c79a22;color:#16c79a;border:1px solid #16c79a}
+.phase2{background:#e9456022;color:#e94560;border:1px solid #e94560}
+.result-box{margin-top:12px;padding:12px;border-radius:8px;font-size:16px;font-weight:bold;text-align:center;display:none}
+.result-box.found{background:#16c79a22;border:1px solid #16c79a;color:#16c79a}
+.result-box.not-found{background:#e9456022;border:1px solid #e94560;color:#e94560}
+</style>
+</head>
+<body>
+<h1>74 - 搜索二维矩阵</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">矩阵可视化</div>
+<div style="color:#aaa;font-size:13px">matrix = [[1,3,5,7],[10,11,16,20],[23,30,34,60]]，target = 3</div>
+<div style="text-align:center"><div id="phaseLabel" class="phase-label phase1">阶段1: 行二分</div></div>
+<div style="text-align:center"><div class="matrix" id="matrix"></div></div>
+<div class="search-info" id="searchInfo">等待开始...</div>
+<div class="result-box" id="resultBox"></div>
+</div>
+<div class="panel">
+<div class="panel-title">搜索过程日志</div>
+<canvas id="logCanvas" width="480" height="400"></canvas>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const MATRIX=[[1,3,5,7],[10,11,16,20],[23,30,34,60]];
+const TARGET=3;
+const ROWS=MATRIX.length,COLS=MATRIX[0].length;
+const canvas=document.getElementById('logCanvas');
+const ctx=canvas.getContext('2d');
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function buildMatrix(rowRange,colRange,compRow,compCol,foundR,foundC){
+  const m=document.getElementById('matrix');
+  m.style.gridTemplateColumns=`repeat(${COLS},60px)`;
+  m.innerHTML='';
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const inRowRange=rowRange&&r>=rowRange[0]&&r<=rowRange[1];
+      const inColRange=colRange&&c>=colRange[0]&&c<=colRange[1];
+      const isCompRow=r===compRow;
+      const isCompCell=r===compRow&&c===compCol;
+      const isFound=r===foundR&&c===foundC;
+      let cls='empty';
+      if(isFound)cls='found';
+      else if(isCompCell)cls='comparing';
+      else if(isCompRow)cls='row-hl';
+      else if(inRowRange)cls='in-range';
+      else cls='out-range';
+      m.innerHTML+=`<div class="cell ${cls}"><span class="val">${MATRIX[r][c]}</span><span class="coord">[${r},${c}]</span></div>`;
+    }
+  }
+}
+
+function generateSteps(){
+  steps=[];
+  // Phase 1: binary search on rows
+  steps.push({type:'start',rowRange:[0,ROWS-1],colRange:null,compRow:-1,compCol:-1,foundR:-1,foundC:-1,phase:1,
+    desc:'开始搜索，先二分确定目标行'});
+  let top=0,bottom=ROWS-1;
+  steps.push({type:'row_start',rowRange:[top,bottom],colRange:null,compRow:-1,compCol:-1,foundR:-1,foundC:-1,phase:1,
+    desc:`阶段1：行二分，top=${top}, bottom=${bottom}`});
+  while(top<=bottom){
+    const midRow=Math.floor((top+bottom)/2);
+    steps.push({type:'row_compare',rowRange:[top,bottom],colRange:null,compRow:midRow,compCol:-1,foundR:-1,foundC:-1,phase:1,
+      desc:`midRow=${midRow}，首元素=${MATRIX[midRow][0]}，末元素=${MATRIX[midRow][COLS-1]}`});
+    if(MATRIX[midRow][0]>TARGET){
+      steps.push({type:'row_go_up',rowRange:[top,midRow-1],colRange:null,compRow:midRow,compCol:-1,foundR:-1,foundC:-1,phase:1,
+        desc:`首元素 ${MATRIX[midRow][0]} > ${TARGET}，目标在上面的行，bottom=${midRow-1}`});
+      bottom=midRow-1;
+    }else if(MATRIX[midRow][COLS-1]<TARGET){
+      steps.push({type:'row_go_down',rowRange:[midRow+1,bottom],colRange:null,compRow:midRow,compCol:-1,foundR:-1,foundC:-1,phase:1,
+        desc:`末元素 ${MATRIX[midRow][COLS-1]} < ${TARGET}，目标在下面的行，top=${midRow+1}`});
+      top=midRow+1;
+    }else{
+      steps.push({type:'row_found',rowRange:[midRow,midRow],colRange:null,compRow:midRow,compCol:-1,foundR:-1,foundC:-1,phase:1,targetRow:midRow,
+        desc:`target 在第 ${midRow} 行 [${MATRIX[midRow][0]}, ${MATRIX[midRow][COLS-1]}]`});
+      // Phase 2: binary search in the row
+      const targetRow=midRow;
+      let left=0,right=COLS-1;
+      steps.push({type:'col_start',rowRange:[targetRow,targetRow],colRange:[left,right],compRow:targetRow,compCol:-1,foundR:-1,foundC:-1,phase:2,
+        desc:`阶段2：列二分，在第 ${targetRow} 行搜索，left=${left}, right=${right}`});
+      while(left<=right){
+        const midCol=Math.floor((left+right)/2);
+        steps.push({type:'col_compare',rowRange:[targetRow,targetRow],colRange:[left,right],compRow:targetRow,compCol:midCol,foundR:-1,foundC:-1,phase:2,
+          desc:`midCol=${midCol}，matrix[${targetRow}][${midCol}]=${MATRIX[targetRow][midCol]}`});
+        if(MATRIX[targetRow][midCol]===TARGET){
+          steps.push({type:'found',rowRange:null,colRange:null,compRow:targetRow,compCol:midCol,foundR:targetRow,foundC:midCol,phase:2,
+            desc:`找到！matrix[${targetRow}][${midCol}] = ${TARGET}`});
+          return;
+        }else if(MATRIX[targetRow][midCol]<TARGET){
+          left=midCol+1;
+          steps.push({type:'col_go_right',rowRange:[targetRow,targetRow],colRange:[left,right],compRow:targetRow,compCol:midCol,foundR:-1,foundC:-1,phase:2,
+            desc:`${MATRIX[targetRow][midCol]} < ${TARGET}，left = ${midCol+1}`});
+        }else{
+          right=midCol-1;
+          steps.push({type:'col_go_left',rowRange:[targetRow,targetRow],colRange:[left,right],compRow:targetRow,compCol:midCol,foundR:-1,foundC:-1,phase:2,
+            desc:`${MATRIX[targetRow][midCol]} > ${TARGET}，right = ${midCol-1}`});
+        }
+      }
+      steps.push({type:'not_found',rowRange:null,colRange:null,compRow:-1,compCol:-1,foundR:-1,foundC:-1,phase:2,
+        desc:'行内未找到 target'});
+      return;
+    }
+  }
+  steps.push({type:'not_found',rowRange:null,colRange:null,compRow:-1,compCol:-1,foundR:-1,foundC:-1,phase:1,
+    desc:'所有行都不包含 target'});
+}
+
+function drawLog(step){
+  ctx.clearRect(0,0,480,400);
+  const x0=20,y0=25,lh=30;
+  ctx.font='11px monospace';ctx.textAlign='left';ctx.textBaseline='middle';
+  let y=y0;
+  for(let i=Math.max(0,currentStep-11);i<=currentStep&&i<steps.length;i++){
+    const s=steps[i];const isCur=i===currentStep;
+    const isPhase1=s.phase===1;
+    const prefix=isPhase1?'[行]':'[列]';
+    ctx.fillStyle=isCur?'#e94560':isPhase1?'#16c79a88':'#e9456088';
+    if(isCur){ctx.fillStyle='#1a1a2e';ctx.fillRect(10,y-11,460,22);ctx.fillStyle=isPhase1?'#16c79a':'#e94560';}
+    ctx.fillText(prefix+' '+s.desc.slice(0,44),x0,y);
+    y+=lh;if(y>380)break;
+  }
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildMatrix(step.rowRange,step.colRange,step.compRow,step.compCol,step.foundR,step.foundC);
+  const pl=document.getElementById('phaseLabel');
+  pl.className='phase-label '+(step.phase===1?'phase1':'phase2');
+  pl.textContent=step.phase===1?'阶段1: 行二分':'阶段2: 列二分';
+  document.getElementById('searchInfo').innerHTML=step.compRow>=0?
+    `当前行: ${step.compRow} | 当前列: ${step.compCol}<br>matrix[${step.compRow}][${step.compCol}] = ${step.compCol>=0?MATRIX[step.compRow][step.compCol]:'-'} vs ${TARGET}`:
+    `搜索范围: 行 [${step.rowRange?step.rowRange.join(','):''}]`;
+  const rb=document.getElementById('resultBox');
+  if(step.type==='found'){rb.style.display='block';rb.className='result-box found';rb.textContent=`找到！位置 [${step.foundR}, ${step.foundC}]`;}
+  else if(step.type==='not_found'){rb.style.display='block';rb.className='result-box not-found';rb.textContent='未找到';}
+  else{rb.style.display='none';}
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  drawLog(step);
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},900);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  buildMatrix([0,ROWS-1],null,-1,-1,-1,-1);
+  document.getElementById('searchInfo').textContent='等待开始...';
+  document.getElementById('resultBox').style.display='none';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  ctx.clearRect(0,0,480,400);ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',180,200);
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){currentStep--;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildMatrix([0,ROWS-1],null,-1,-1,-1,-1);
+</script>
+</body>
+</html>

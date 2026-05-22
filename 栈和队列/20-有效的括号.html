@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>20-有效的括号</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:320px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.string-row{display:flex;gap:4px;margin:16px 0;justify-content:center}
+.s-char{width:36px;height:36px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:bold;font-family:monospace;background:#0f3460;border:2px solid #333;transition:all .3s}
+.s-char.current{border-color:#e94560;color:#e94560;background:#e9456022}
+.s-char.processed{border-color:#16c79a;color:#16c79a;background:#16c79a22}
+.s-char.pending{color:#555}
+.stack-container{display:flex;flex-direction:column-reverse;align-items:center;min-height:260px;gap:4px;padding:10px;border:2px dashed #333;border-radius:8px;background:#0f346022}
+.stack-label{color:#aaa;font-size:12px;margin-bottom:4px}
+.stack-item{width:50px;height:44px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold;font-family:monospace;transition:all .3s;animation:slideIn .3s ease}
+.stack-item.open{background:#16c79a33;border:2px solid #16c79a;color:#16c79a}
+.stack-item.close{background:#e9456033;border:2px solid #e94560;color:#e94560}
+@keyframes slideIn{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.match-info{margin-top:12px;padding:10px;border-radius:8px;background:#0f3460;font-size:13px;color:#aaa;min-height:40px}
+.match-info .matched{color:#16c79a}.match-info .mismatched{color:#e94560}
+.result-box{margin-top:12px;padding:12px;border-radius:8px;font-size:16px;font-weight:bold;text-align:center}
+.result-box.valid{background:#16c79a22;border:1px solid #16c79a;color:#16c79a}
+.result-box.invalid{background:#e9456022;border:1px solid #e94560;color:#e94560}
+</style>
+</head>
+<body>
+<h1>20 - 有效的括号</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">输入字符串</div>
+<div class="string-row" id="stringRow"></div>
+<div style="margin-top:12px;color:#aaa;font-size:13px">当前字符: <span id="curChar" style="color:#e94560;font-size:18px;font-family:monospace">-</span></div>
+<div class="match-info" id="matchInfo">等待开始...</div>
+<div class="result-box" id="resultBox" style="display:none"></div>
+</div>
+<div class="panel">
+<div class="panel-title">栈状态</div>
+<div class="stack-label">栈底 ↓</div>
+<div class="stack-container" id="stackContainer">
+<div style="color:#555;font-size:14px">空栈</div>
+</div>
+<div style="margin-top:8px;color:#aaa;font-size:12px;text-align:center">栈顶 ↑</div>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const INPUT="()[]{}";
+const PAIRS={')':'(',']':'[','}':'{'};
+const OPEN=new Set(['(','[','{']);
+const canvas=null;
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function buildStringRow(curIdx){
+  const row=document.getElementById('stringRow');row.innerHTML='';
+  INPUT.split('').forEach((ch,i)=>{
+    const cls=i<curIdx?'processed':i===curIdx?'current':'pending';
+    row.innerHTML+=`<div class="s-char ${cls}">${ch}</div>`;
+  });
+}
+
+function buildStack(stack,topIdx,popIdx){
+  const sc=document.getElementById('stackContainer');sc.innerHTML='';
+  if(stack.length===0){sc.innerHTML='<div style="color:#555;font-size:14px">空栈</div>';return;}
+  stack.forEach((ch,i)=>{
+    const isTop=i===stack.length-1&&topIdx===i;
+    const isPop=i===popIdx;
+    const cls=OPEN.has(ch)?'open':'close';
+    const style=isPop?'opacity:0.3;transform:translateY(-10px)':isTop?'transform:scale(1.1)':'';
+    sc.innerHTML+=`<div class="stack-item ${cls}" style="${style}">${ch}</div>`;
+  });
+}
+
+function generateSteps(){
+  steps=[];
+  const stack=[];
+  steps.push({type:'start',stack:[],idx:-1,popIdx:-1,
+    desc:`开始验证括号字符串 "${INPUT}"`});
+  for(let i=0;i<INPUT.length;i++){
+    const ch=INPUT[i];
+    if(OPEN.has(ch)){
+      stack.push(ch);
+      steps.push({type:'push',stack:[...stack],idx:i,popIdx:-1,ch,
+        desc:`'${ch}' 是左括号，入栈 → 栈: [${stack.join(',')}]`});
+    }else{
+      const top=stack[stack.length-1];
+      const expected=PAIRS[ch];
+      if(stack.length===0){
+        steps.push({type:'error_empty',stack:[...stack],idx:i,popIdx:-1,ch,
+          desc:`'${ch}' 是右括号，但栈为空！无法匹配 → 无效`});
+        steps.push({type:'done',stack:[...stack],idx:i,popIdx:-1,valid:false,
+          desc:`验证结果: 无效 (右括号无法匹配)`});
+        return;
+      }
+      if(top===expected){
+        stack.pop();
+        steps.push({type:'match',stack:[...stack],idx:i,popIdx:stack.length,ch,top,
+          desc:`'${ch}' 匹配栈顶 '${top}' ✓ 出栈 → 栈: [${stack.length?stack.join(','):'空'}]`});
+      }else{
+        steps.push({type:'mismatch',stack:[...stack],idx:i,popIdx:-1,ch,top,expected,
+          desc:`'${ch}' 期望匹配 '${expected}'，但栈顶是 '${top}' ✗ 不匹配 → 无效`});
+        steps.push({type:'done',stack:[...stack],idx:i,popIdx:-1,valid:false,
+          desc:`验证结果: 无效 (括号不匹配)`});
+        return;
+      }
+    }
+  }
+  if(stack.length===0){
+    steps.push({type:'done',stack:[],idx:INPUT.length,popIdx:-1,valid:true,
+      desc:`验证结果: 有效 (所有括号匹配且栈为空)`});
+  }else{
+    steps.push({type:'done',stack:[...stack],idx:INPUT.length,popIdx:-1,valid:false,
+      desc:`验证结果: 无效 (栈中还有未匹配的左括号)`});
+  }
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildStringRow(step.idx);
+  document.getElementById('curChar').textContent=step.idx>=0?INPUT[step.idx]:'-';
+  buildStack(step.stack,step.stack.length-1,step.popIdx);
+  const mi=document.getElementById('matchInfo');
+  if(step.type==='match')mi.innerHTML=`<span class="matched">✓ '${step.ch}' 匹配 '${step.top}'</span>`;
+  else if(step.type==='mismatch')mi.innerHTML=`<span class="mismatched">✗ '${step.ch}' 期望 '${step.expected}'，实际 '${step.top}'</span>`;
+  else if(step.type==='error_empty')mi.innerHTML=`<span class="mismatched">✗ 栈为空，无法匹配 '${step.ch}'</span>`;
+  else if(step.type==='push')mi.innerHTML=`入栈 '${step.ch}'`;
+  else mi.innerHTML='等待...';
+  const rb=document.getElementById('resultBox');
+  if(step.type==='done'){
+    rb.style.display='block';rb.className='result-box '+(step.valid?'valid':'invalid');
+    rb.textContent=step.valid?'✓ 有效括号':'✗ 无效括号';
+  }else{rb.style.display='none';}
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},800);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  document.getElementById('resultBox').style.display='none';
+  document.getElementById('matchInfo').textContent='等待开始...';
+  buildStringRow(-1);buildStack([],-1,-1);
+  document.getElementById('curChar').textContent='-';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){
+  currentStep=0;
+  for(let i=0;i<=currentStep;i++){}
+  // Rebuild from scratch
+  const stk=[];let ci=-1;
+  const targetStep=currentStep>0?currentStep-1:0;currentStep=0;
+  // Simple: just rebuild state
+  currentStep=Math.max(0,currentStep);
+  // Easier approach: replay to prev step
+  let prev=currentStep>0?currentStep-1:0;
+  currentStep=0;
+  // Actually let's just go back one step and rebuild
+  // For simplicity, recalculate stack state
+  currentStep--;
+  if(currentStep<0)currentStep=0;
+  updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildStringRow(-1);buildStack([],-1,-1);
+</script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>124 - 二叉树中的最大路径和</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{color:#e94560;font-size:24px;margin-bottom:10px}
+#canvas{border:1px solid #333;border-radius:8px;background:#16213e}
+.controls{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap;justify-content:center}
+.controls button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:background .2s}
+.controls button:hover{background:#c73a52}
+#stepInfo{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;min-height:80px;margin-top:10px}
+#stepInfo h3{color:#16c79a;margin-bottom:6px}
+#stepInfo p{line-height:1.6}
+.highlight{color:#e94560;font-weight:bold}
+.gold{color:#ffd700;font-weight:bold}
+#maxPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#maxPanel h3{color:#16c79a;margin-bottom:6px}
+.max-display{font-size:24px;color:#ffd700;font-weight:bold}
+#stackPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#stackPanel h3{color:#16c79a;margin-bottom:6px}
+.stack-items{display:flex;gap:6px;flex-wrap:wrap;min-height:30px}
+.stack-item{background:#0f3460;padding:4px 10px;border-radius:4px;color:#16c79a;font-size:13px}
+.stack-item.active{background:#e94560;color:#fff}
+</style>
+</head>
+<body>
+<h1>124 - 二叉树中的最大路径和</h1>
+<canvas id="canvas" width="780" height="420"></canvas>
+<div class="controls">
+<button id="btnReset">⏮ 重置</button>
+<button id="btnPrev">⏪ 步骤后退</button>
+<button id="btnPlay">▶ 播放</button>
+<button id="btnNext">步骤前进 ⏩</button>
+</div>
+<div id="stepInfo"><h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p></div>
+<div id="maxPanel"><h3>全局最大路径和</h3><div class="max-display" id="maxVal">-∞</div></div>
+<div id="stackPanel"><h3>递归栈</h3><div class="stack-items" id="stackItems"></div></div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=780,H=420;
+const tree={val:-10,left:{val:9,left:{val:3,left:null,right:null},right:{val:4,left:null,right:null}},right:{val:2,left:null,right:{val:5,left:null,right:null}}};
+const nodePos={};
+function assignPos(node,x,y,spread){
+  if(!node)return;nodePos[node.val]={x,y,idx:Math.random()};
+  assignPos(node.left,x-spread,y+60,spread/2);
+  assignPos(node.right,x+spread,y+60,spread/2);
+}
+assignPos(tree,390,50,140);
+const steps=[];const gainMap={};let globalMax=-Infinity;
+function genSteps(node,stack){
+  if(!node){steps.push({type:'null',desc:'空节点，增益 = 0',max:globalMax,stack:[...stack],gainMap:{...gainMap}});return 0;}
+  stack.push(node.val);
+  steps.push({type:'enter',val:node.val,desc:`进入节点 ${node.val}，递归左子树`,max:globalMax,stack:[...stack],gainMap:{...gainMap}});
+  const leftGain=genSteps(node.left,stack);
+  steps.push({type:'leftDone',val:node.val,desc:`节点 ${node.val} 左子树增益 = ${leftGain}`,max:globalMax,stack:[...stack],gainMap:{...gainMap},leftGain});
+  const rightGain=genSteps(node.right,stack);
+  steps.push({type:'rightDone',val:node.val,desc:`节点 ${node.val} 右子树增益 = ${rightGain}`,max:globalMax,stack:[...stack],gainMap:{...gainMap},leftGain,rightGain});
+  const curMax=node.val+Math.max(0,leftGain)+Math.max(0,rightGain);
+  if(curMax>globalMax)globalMax=curMax;
+  const gain=node.val+Math.max(0,leftGain,rightGain);
+  gainMap[node.val]=gain;
+  steps.push({type:'compute',val:node.val,desc:`节点 ${node.val}：路径和 = ${node.val}+max(0,${leftGain})+max(0,${rightGain}) = ${curMax}，增益 = ${gain}`,max:globalMax,stack:[...stack],gainMap:{...gainMap},curMax,gain});
+  stack.pop();
+  return gain;
+}
+genSteps(tree,[]);
+steps.push({type:'result',desc:`最大路径和 = ${globalMax}`,max:globalMax,gainMap:{...gainMap}});
+let curStep=-1,playing=false,timer=null,curGainMap={},curMax=-Infinity;
+function rebuildState(){
+  curGainMap={};curMax=-Infinity;
+  for(let i=0;i<=curStep&&i<steps.length;i++){
+    const s=steps[i];
+    if(s.gainMap)curGainMap={...s.gainMap};
+    if(s.max!==undefined)curMax=Math.max(curMax,s.max);
+  }
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);drawEdges(tree);drawNodes(tree);
+}
+function drawEdges(node){
+  if(!node)return;const p=nodePos[node.val];
+  if(node.left){const q=nodePos[node.left.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawEdges(node.left);}
+  if(node.right){const q=nodePos[node.right.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawEdges(node.right);}
+}
+function drawNodes(node){
+  if(!node)return;const p=nodePos[node.val];const s=curStep>=0?steps[curStep]:null;
+  const isCur=s&&s.val===node.val;const hasGain=curGainMap[node.val]!==undefined;
+  ctx.beginPath();ctx.arc(p.x,p.y,22,0,Math.PI*2);
+  if(isCur){ctx.fillStyle='#e94560';ctx.shadowColor='#e94560';ctx.shadowBlur=15;}
+  else if(hasGain){ctx.fillStyle='#16c79a';ctx.shadowBlur=0;}
+  else{ctx.fillStyle='#0f3460';ctx.shadowBlur=0;}
+  ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle=isCur?'#e94560':hasGain?'#16c79a':'#444';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(node.val,p.x,p.y);
+  if(hasGain){ctx.fillStyle='#ffd700';ctx.font='bold 10px sans-serif';ctx.fillText('g='+curGainMap[node.val],p.x,p.y+30);}
+  drawNodes(node.left);drawNodes(node.right);
+}
+function renderUI(){
+  draw();const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  const infoEl=document.getElementById('stepInfo');
+  if(s){const tl={null:'空节点',enter:'进入节点',leftDone:'左子树完成',rightDone:'右子树完成',compute:'计算路径和',result:'最终结果'};
+  infoEl.innerHTML=`<h3>步骤 ${curStep+1} / ${steps.length} — <span class="highlight">${tl[s.type]||s.type}</span></h3><p>${s.desc}</p>`;}
+  else infoEl.innerHTML=`<h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p>`;
+  document.getElementById('maxVal').textContent=curMax===-Infinity?'-∞':curMax;
+  const si=document.getElementById('stackItems');const stk=s?s.stack:[];
+  si.innerHTML=stk.length?stk.map((v,i)=>`<span class="stack-item${i===stk.length-1?' active':''}">${v}</span>`).join(''):'<span style="color:#888">栈为空</span>';
+}
+function stepForward(){if(curStep<steps.length-1){curStep++;rebuildState();renderUI();}else stopPlay();}
+function stepBack(){if(curStep>=0){curStep--;rebuildState();renderUI();}}
+function resetAnim(){stopPlay();curStep=-1;rebuildState();renderUI();}
+function startPlay(){if(playing)return;playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)stepForward();else stopPlay();},800);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+document.getElementById('btnPlay').onclick=()=>{if(playing)stopPlay();else startPlay();};
+document.getElementById('btnNext').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btnPrev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btnReset').onclick=resetAnim;
+renderUI();
+</script>
+</body>
+</html>

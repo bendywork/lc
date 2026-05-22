@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>108 - 将有序数组转换为二叉搜索树</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{color:#e94560;font-size:24px;margin-bottom:10px}
+#canvas{border:1px solid #333;border-radius:8px;background:#16213e}
+.controls{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap;justify-content:center}
+.controls button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:background .2s}
+.controls button:hover{background:#c73a52}
+#stepInfo{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;min-height:80px;margin-top:10px}
+#stepInfo h3{color:#16c79a;margin-bottom:6px}
+#stepInfo p{line-height:1.6}
+.highlight{color:#e94560;font-weight:bold}
+#arrayPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#arrayPanel h3{color:#16c79a;margin-bottom:6px}
+.arr-row{display:flex;gap:4px;align-items:center;margin-bottom:6px}
+.arr-label{color:#888;min-width:60px;font-size:12px}
+.arr-cell{padding:4px 8px;border-radius:4px;font-size:13px;font-weight:bold;min-width:28px;text-align:center}
+.arr-cell.mid{background:#e94560;color:#fff}
+.arr-cell.left-range{background:#16c79a33;color:#16c79a}
+.arr-cell.right-range{background:#0f346088;color:#88aaff}
+.arr-cell.done{background:#555;color:#888}
+.arr-cell.normal{background:#0f3460;color:#eee}
+</style>
+</head>
+<body>
+<h1>108 - 将有序数组转换为二叉搜索树</h1>
+<canvas id="canvas" width="780" height="420"></canvas>
+<div class="controls">
+<button id="btnReset">⏮ 重置</button>
+<button id="btnPrev">⏪ 步骤后退</button>
+<button id="btnPlay">▶ 播放</button>
+<button id="btnNext">步骤前进 ⏩</button>
+</div>
+<div id="stepInfo"><h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p></div>
+<div id="arrayPanel"><h3>有序数组</h3><div id="arrayDisplay"></div></div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=780,H=420;
+const arr=[-10,-3,0,5,9];
+const steps=[];const builtNodes={};const nodePos={};
+function genSteps(left,right,depth){
+  if(left>right){steps.push({type:'null',desc:'子数组为空，返回 null',left,right,depth,built:JSON.parse(JSON.stringify(builtNodes))});return null;}
+  const mid=Math.floor((left+right)/2);
+  const val=arr[mid];
+  steps.push({type:'selectMid',val,desc:`子数组 [${left}..${right}]，中位索引 mid=${mid}，选取 ${val} 作为根`,left,right,mid,depth,built:JSON.parse(JSON.stringify(builtNodes))});
+  builtNodes[val]={left:null,right:null,depth};
+  steps.push({type:'createNode',val,desc:`创建节点 ${val}`,left,right,mid,depth,built:JSON.parse(JSON.stringify(builtNodes))});
+  const leftNode=genSteps(left,mid-1,depth+1);
+  builtNodes[val].left=leftNode?leftNode.val:null;
+  const rightNode=genSteps(mid+1,right,depth+1);
+  builtNodes[val].right=rightNode?rightNode.val:null;
+  steps.push({type:'nodeComplete',val,desc:`节点 ${val} 构造完成`,left,right,mid,depth,built:JSON.parse(JSON.stringify(builtNodes))});
+  return{val,left:leftNode,right:rightNode};
+}
+genSteps(0,arr.length-1,0);
+function assignPosBuilt(){
+  const root=Object.entries(builtNodes).find(([v,n])=>n.depth===0);
+  if(!root)return;
+  function assign(val,x,y,spread){
+    if(!val)return;nodePos[val]={x,y};
+    const n=builtNodes[val];
+    if(n.left)assign(n.left,x-spread,y+60,spread/2);
+    if(n.right)assign(n.right,x+spread,y+60,spread/2);
+  }
+  assign(parseInt(root[0]),390,50,140);
+}
+let curStep=-1,playing=false,timer=null;
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  if(!s)return;
+  const b=s.built;assignPosBuilt();
+  for(const[val,node]of Object.entries(b)){
+    const p=nodePos[parseInt(val)];if(!p)continue;
+    if(node.left&&nodePos[node.left]){const q=nodePos[node.left];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();}
+    if(node.right&&nodePos[node.right]){const q=nodePos[node.right];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();}
+  }
+  for(const[val,node]of Object.entries(b)){
+    const p=nodePos[parseInt(val)];if(!p)continue;
+    const isCur=s&&s.val&&parseInt(val)===s.val;
+    ctx.beginPath();ctx.arc(p.x,p.y,22,0,Math.PI*2);
+    if(isCur){ctx.fillStyle='#e94560';ctx.shadowColor='#e94560';ctx.shadowBlur=15;}
+    else{ctx.fillStyle='#0f3460';ctx.shadowBlur=0;}
+    ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle=isCur?'#e94560':'#444';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(val,p.x,p.y);
+  }
+}
+function renderArrays(s){
+  const el=document.getElementById('arrayDisplay');
+  if(!s){el.innerHTML='';return;}
+  let html='<div class="arr-row"><span class="arr-label">数组</span>';
+  arr.forEach((v,i)=>{
+    let cls='normal';
+    if(s.mid!==undefined&&i===s.mid)cls='mid';
+    else if(i>=s.left&&i<s.mid)cls='left-range';
+    else if(i>s.mid&&i<=s.right)cls='right-range';
+    html+=`<span class="arr-cell ${cls}">${v}</span>`;
+  });
+  html+='</div>';el.innerHTML=html;
+}
+function renderUI(){
+  draw();const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  const infoEl=document.getElementById('stepInfo');
+  if(s){const tl={null:'空子树',selectMid:'选中点',createNode:'创建节点',nodeComplete:'节点完成'};
+  infoEl.innerHTML=`<h3>步骤 ${curStep+1} / ${steps.length} — <span class="highlight">${tl[s.type]||s.type}</span></h3><p>${s.desc}</p>`;}
+  else infoEl.innerHTML=`<h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p>`;
+  renderArrays(s);
+}
+function stepForward(){if(curStep<steps.length-1){curStep++;renderUI();}else stopPlay();}
+function stepBack(){if(curStep>=0){curStep--;renderUI();}}
+function resetAnim(){stopPlay();curStep=-1;renderUI();}
+function startPlay(){if(playing)return;playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)stepForward();else stopPlay();},800);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+document.getElementById('btnPlay').onclick=()=>{if(playing)stopPlay();else startPlay();};
+document.getElementById('btnNext').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btnPrev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btnReset').onclick=resetAnim;
+renderUI();
+</script>
+</body>
+</html>

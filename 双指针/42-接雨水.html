@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>42 - 接雨水</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:800px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>42 - 接雨水</h1>
+<p id="desc">给定 n 个非负整数表示柱子高度图，计算按此排列的柱子能接多少雨水。双指针从两端向中间遍历，维护左右最大值，较小一侧决定当前位置的水位。</p>
+<canvas id="cv" width="900" height="420"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="700" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#e94560"></span>左指针</span>
+<span><span class="dot" style="background:#16c79a"></span>右指针</span>
+<span><span class="dot" style="background:#1a8fdd"></span>积水</span>
+<span><span class="dot" style="background:#8a6fff"></span>左最大值线</span>
+<span><span class="dot" style="background:#ff9f43"></span>右最大值线</span>
+</div>
+
+<script>
+const heights=[0,1,0,2,1,0,1,3,2,1,2,1];
+const steps=[];
+const waterAt=new Array(heights.length).fill(0);
+
+function buildSteps(){
+  steps.length=0;
+  const n=heights.length;
+  let l=0,r=n-1,leftMax=0,rightMax=0,totalWater=0;
+  const curWater=new Array(n).fill(0);
+  steps.push({l,r,leftMax,rightMax,totalWater,curWater:[...curWater],desc:'初始化：左=0，右='+r+'，leftMax=0，rightMax=0',side:''});
+  while(l<r){
+    if(heights[l]<=heights[r]){
+      if(heights[l]>=leftMax){
+        leftMax=heights[l];
+        steps.push({l,r,leftMax,rightMax,totalWater,curWater:[...curWater],desc:`height[${l}]=${heights[l]} >= leftMax=${heights[l]>=leftMax?leftMax:leftMax}，更新 leftMax = ${leftMax}，无积水`,side:'l'});
+      }else{
+        const w=leftMax-heights[l];
+        curWater[l]=w;totalWater+=w;
+        steps.push({l,r,leftMax,rightMax,totalWater,curWater:[...curWater],desc:`height[${l}]=${heights[l]} < leftMax=${leftMax}，积水 = ${leftMax}-${heights[l]} = ${w}，累计 = ${totalWater}`,side:'l'});
+      }
+      l++;
+    }else{
+      if(heights[r]>=rightMax){
+        rightMax=heights[r];
+        steps.push({l,r,leftMax,rightMax,totalWater,curWater:[...curWater],desc:`height[${r}]=${heights[r]} >= rightMax，更新 rightMax = ${rightMax}，无积水`,side:'r'});
+      }else{
+        const w=rightMax-heights[r];
+        curWater[r]=w;totalWater+=w;
+        steps.push({l,r,leftMax,rightMax,totalWater,curWater:[...curWater],desc:`height[${r}]=${heights[r]} < rightMax=${rightMax}，积水 = ${rightMax}-${heights[r]} = ${w}，累计 = ${totalWater}`,side:'r'});
+      }
+      r--;
+    }
+  }
+  steps.push({l,r,leftMax,rightMax,totalWater,curWater:[...curWater],desc:`遍历完成，总积水量 = ${totalWater}`,side:'',final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const barW=48,gap=8,totalW=heights.length*(barW+gap)-gap;
+const offsetX=(W-totalW)/2,maxH=240,baseY=H-60;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{l:0,r:heights.length-1,leftMax:0,rightMax:0,totalWater:0,curWater:new Array(heights.length).fill(0),side:'',final:false}:steps[cur];
+  const scale=maxH/Math.max(...heights);
+  // left max line
+  if(s.leftMax>0){
+    const ly=baseY-s.leftMax*scale;
+    ctx.strokeStyle='#8a6fff';ctx.lineWidth=2;ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(offsetX-10,ly);ctx.lineTo(offsetX+totalW+10,ly);ctx.stroke();
+    ctx.setLineDash([]);ctx.fillStyle='#8a6fff';ctx.font='12px sans-serif';ctx.textAlign='right';
+    ctx.fillText('leftMax='+s.leftMax,offsetX-14,ly+4);
+  }
+  // right max line
+  if(s.rightMax>0){
+    const ry=baseY-s.rightMax*scale;
+    ctx.strokeStyle='#ff9f43';ctx.lineWidth=2;ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(offsetX-10,ry);ctx.lineTo(offsetX+totalW+10,ry);ctx.stroke();
+    ctx.setLineDash([]);ctx.fillStyle='#ff9f43';ctx.font='12px sans-serif';ctx.textAlign='left';
+    ctx.fillText('rightMax='+s.rightMax,offsetX+totalW+14,ry+4);
+  }
+  // bars and water
+  for(let i=0;i<heights.length;i++){
+    const x=offsetX+i*(barW+gap);
+    const h=heights[i]*scale;
+    // bar
+    ctx.fillStyle='#3a3a6a';
+    ctx.fillRect(x,baseY-h,barW,h);
+    // water
+    if(s.curWater[i]>0){
+      const wh=s.curWater[i]*scale;
+      ctx.fillStyle='rgba(26,143,221,0.55)';
+      ctx.fillRect(x,baseY-h-wh,barW,wh);
+    }
+    // pointer highlight
+    if(i===s.l){ctx.fillStyle='#e94560';ctx.fillRect(x,baseY-h,barW,h);}
+    if(i===s.r){ctx.fillStyle='#16c79a';ctx.fillRect(x,baseY-h,barW,h);}
+    // value
+    ctx.fillStyle='#ccc';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(heights[i],x+barW/2,baseY-h-20);
+    if(s.curWater[i]>0){ctx.fillStyle='#1a8fdd';ctx.fillText('+'+s.curWater[i],x+barW/2,baseY-h-6);}
+    ctx.fillStyle='#666';ctx.font='11px sans-serif';
+    ctx.fillText(i,x+barW/2,baseY+16);
+  }
+  // pointer arrows
+  if(!s.final){
+    drawPtr(s.l,'#e94560','L');
+    drawPtr(s.r,'#16c79a','R');
+  }
+  // total water
+  ctx.fillStyle='#fff';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+  ctx.fillText('总积水量: '+s.totalWater,W/2,30);
+  // final highlight
+  if(s.final){
+    ctx.fillStyle='#ffd700';ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+    ctx.fillText('计算完成，总积水量 = '+s.totalWater,W/2,55);
+  }
+}
+
+function drawPtr(i,color,label){
+  const x=offsetX+i*(barW+gap)+barW/2;
+  ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x,baseY-maxH-50);ctx.lineTo(x-7,baseY-maxH-38);ctx.lineTo(x+7,baseY-maxH-38);ctx.closePath();ctx.fill();
+  ctx.font='bold 13px sans-serif';ctx.textAlign='center';ctx.fillText(label,x,baseY-maxH-55);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

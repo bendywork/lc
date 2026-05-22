@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>240-搜索二维矩阵II</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:340px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.matrix{display:inline-grid;gap:3px;margin:12px auto;padding:8px;background:#0f3460;border-radius:8px}
+.cell{width:56px;height:46px;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all .3s;font-weight:bold;font-family:monospace}
+.cell .val{font-size:16px}.cell .coord{font-size:8px;color:#aaa}
+.cell.empty{background:#16213e;border:2px solid #333;color:#fff}
+.cell.visited{background:#33333388;border:2px solid #555;color:#555}
+.cell.current{background:#ffd70033;border:2px solid #ffd700;color:#ffd700}
+.cell.eliminated-col{background:#16213e88;border:1px solid #3333;color:#555}
+.cell.eliminated-row{background:#16213e88;border:1px solid #3333;color:#555}
+.cell.found{background:#16c79a88;border:2px solid #16c79a;color:#16c79a;box-shadow:0 0 12px #16c79a44}
+.cell.greater{background:#e9456022;border:2px solid #e9456044;color:#e9456088}
+.cell.less{background:#16c79a22;border:2px solid #16c79a44;color:#16c79a88}
+.search-info{margin-top:16px;background:#0f3460;border-radius:8px;padding:10px;font-size:13px;line-height:1.8}
+.search-info .key{color:#16c79a;font-weight:bold}.search-info .hl{color:#ffd700}.search-info .red{color:#e94560}
+.path-display{margin-top:12px;background:#0f3460;border-radius:8px;padding:8px;font-size:12px;font-family:monospace;color:#16c79a;min-height:24px}
+.result-box{margin-top:12px;padding:12px;border-radius:8px;font-size:16px;font-weight:bold;text-align:center;display:none}
+.result-box.found{background:#16c79a22;border:1px solid #16c79a;color:#16c79a}
+.result-box.not-found{background:#e9456022;border:1px solid #e94560;color:#e94560}
+</style>
+</head>
+<body>
+<h1>240 - 搜索二维矩阵II</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">矩阵可视化 (阶梯搜索)</div>
+<div style="color:#aaa;font-size:13px">matrix = [[1,4,7],[2,5,8],[3,6,9]]，target = 5</div>
+<div style="text-align:center"><div class="matrix" id="matrix"></div></div>
+<div class="search-info" id="searchInfo">等待开始...</div>
+<div class="path-display" id="pathDisplay">路径: -</div>
+<div class="result-box" id="resultBox"></div>
+</div>
+<div class="panel">
+<div class="panel-title">搜索过程</div>
+<canvas id="logCanvas" width="480" height="400"></canvas>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const MATRIX=[[1,4,7],[2,5,8],[3,6,9]];
+const TARGET=5;
+const ROWS=MATRIX.length,COLS=MATRIX[0].length;
+const canvas=document.getElementById('logCanvas');
+const ctx=canvas.getContext('2d');
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function buildMatrix(curR,curC,visited,elimRows,elimCols,foundR,foundC){
+  const m=document.getElementById('matrix');
+  m.style.gridTemplateColumns=`repeat(${COLS},56px)`;
+  m.innerHTML='';
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const isCur=r===curR&&c===curC;
+      const isVisited=visited&&visited.has(r+','+c);
+      const isElimRow=elimRows&&elimRows.has(r);
+      const isElimCol=elimCols&&elimCols.has(c);
+      const isFound=r===foundR&&c===foundC;
+      const isGreater=isCur&&MATRIX[r][c]>TARGET;
+      const isLess=isCur&&MATRIX[r][c]<TARGET;
+      let cls='empty';
+      if(isFound)cls='found';
+      else if(isGreater)cls='greater';
+      else if(isLess)cls='less';
+      else if(isCur)cls='current';
+      else if(isVisited)cls='visited';
+      else if(isElimRow||isElimCol)cls='eliminated-col';
+      m.innerHTML+=`<div class="cell ${cls}"><span class="val">${MATRIX[r][c]}</span><span class="coord">[${r},${c}]</span></div>`;
+    }
+  }
+}
+
+function generateSteps(){
+  steps=[];
+  let row=0,col=COLS-1;
+  const visited=new Set();
+  const elimRows=new Set();const elimCols=new Set();
+  steps.push({type:'start',row,col,visited:new Set(),elimRows:new Set(),elimCols:new Set(),foundR:-1,foundC:-1,
+    desc:`开始阶梯搜索，从右上角 [0, ${COLS-1}] 出发，matrix[0][${COLS-1}]=${MATRIX[0][COLS-1]}`});
+  while(row<ROWS&&col>=0){
+    visited.add(row+','+col);
+    const val=MATRIX[row][col];
+    if(val===TARGET){
+      steps.push({type:'found',row,col,visited:new Set(visited),elimRows:new Set(elimRows),elimCols:new Set(elimCols),foundR:row,foundC:col,
+        desc:`matrix[${row}][${col}]=${val} === ${TARGET}，找到！`});
+      return;
+    }else if(val>TARGET){
+      elimCols.add(col);
+      steps.push({type:'move_left',row,col:col-1,visited:new Set(visited),elimRows:new Set(elimRows),elimCols:new Set(elimCols),foundR:-1,foundC:-1,val,
+        desc:`matrix[${row}][${col}]=${val} > ${TARGET}，排除第 ${col} 列，左移 → [${row}, ${col-1}]`});
+      col--;
+    }else{
+      elimRows.add(row);
+      steps.push({type:'move_down',row:row+1,col,visited:new Set(visited),elimRows:new Set(elimRows),elimCols:new Set(elimCols),foundR:-1,foundC:-1,val,
+        desc:`matrix[${row}][${col}]=${val} < ${TARGET}，排除第 ${row} 行，下移 → [${row+1}, ${col}]`});
+      row++;
+    }
+  }
+  steps.push({type:'not_found',row,col,visited:new Set(visited),elimRows:new Set(elimRows),elimCols:new Set(elimCols),foundR:-1,foundC:-1,
+    desc:'搜索结束，超出边界，未找到 target'});
+}
+
+function drawLog(step){
+  ctx.clearRect(0,0,480,400);
+  const x0=20,y0=25,lh=32;
+  ctx.font='12px monospace';ctx.textAlign='left';ctx.textBaseline='middle';
+  let y=y0;
+  for(let i=0;i<=currentStep&&i<steps.length;i++){
+    const s=steps[i];const isCur=i===currentStep;
+    const icons={start:'▶',move_left:'◄',move_down:'▼',found:'★',not_found:'✗'};
+    const icon=icons[s.type]||'·';
+    ctx.fillStyle=isCur?'#e94560':s.type==='found'?'#16c79a':s.type==='not_found'?'#e94560':s.type==='move_left'?'#16c79a':'#e94560';
+    if(isCur){ctx.fillStyle='#1a1a2e';ctx.fillRect(10,y-12,460,24);ctx.fillStyle='#e94560';}
+    ctx.fillText(icon+' '+s.desc.slice(0,46),x0,y);
+    y+=lh;if(y>380)break;
+  }
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildMatrix(step.row,step.col,step.visited,step.elimRows,step.elimCols,step.foundR,step.foundC);
+  document.getElementById('searchInfo').innerHTML=
+    `当前位置: <span class="hl">[${step.row}, ${step.col}]</span> = ${step.row>=0&&step.col>=0&&step.row<ROWS&&step.col<COLS?MATRIX[step.row][step.col]:'-'}<br>`+
+    `已排除行: ${step.elimRows.size?Array.from(step.elimRows).join(', '):'无'} | 已排除列: ${step.elimCols.size?Array.from(step.elimCols).join(', '):'无'}`;
+  const pathArr=[];
+  if(step.visited){step.visited.forEach(k=>{const [r,c]=k.split(',');pathArr.push(`[${r},${c}]=${MATRIX[r][c]}`);});}
+  document.getElementById('pathDisplay').textContent=`路径: ${pathArr.join(' → ')||'-'}`;
+  const rb=document.getElementById('resultBox');
+  if(step.type==='found'){rb.style.display='block';rb.className='result-box found';rb.textContent=`找到！位置 [${step.foundR}, ${step.foundC}]`;}
+  else if(step.type==='not_found'){rb.style.display='block';rb.className='result-box not-found';rb.textContent='未找到';}
+  else{rb.style.display='none';}
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  drawLog(step);
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},800);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  buildMatrix(0,COLS-1,new Set(),new Set(),new Set(),-1,-1);
+  document.getElementById('searchInfo').textContent='等待开始...';
+  document.getElementById('pathDisplay').textContent='路径: -';
+  document.getElementById('resultBox').style.display='none';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  ctx.clearRect(0,0,480,400);ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',180,200);
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){currentStep--;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildMatrix(0,COLS-1,new Set(),new Set(),new Set(),-1,-1);
+</script>
+</body>
+</html>

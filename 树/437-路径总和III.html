@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>437 - 路径总和III</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{color:#e94560;font-size:24px;margin-bottom:10px}
+#canvas{border:1px solid #333;border-radius:8px;background:#16213e}
+.controls{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap;justify-content:center}
+.controls button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:background .2s}
+.controls button:hover{background:#c73a52}
+#stepInfo{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;min-height:80px;margin-top:10px}
+#stepInfo h3{color:#16c79a;margin-bottom:6px}
+#stepInfo p{line-height:1.6}
+.highlight{color:#e94560;font-weight:bold}
+.gold{color:#ffd700;font-weight:bold}
+#prefixPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#prefixPanel h3{color:#16c79a;margin-bottom:6px}
+.prefix-items{display:flex;gap:6px;flex-wrap:wrap;min-height:30px}
+.prefix-item{background:#0f3460;padding:4px 10px;border-radius:4px;color:#16c79a;font-size:13px}
+.prefix-item.match{background:#ffd700;color:#1a1a2e;font-weight:bold}
+#countPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#countPanel h3{color:#16c79a;margin-bottom:6px}
+.count-display{font-size:28px;color:#ffd700;font-weight:bold}
+</style>
+</head>
+<body>
+<h1>437 - 路径总和III（targetSum=8）</h1>
+<canvas id="canvas" width="780" height="420"></canvas>
+<div class="controls">
+<button id="btnReset">⏮ 重置</button>
+<button id="btnPrev">⏪ 步骤后退</button>
+<button id="btnPlay">▶ 播放</button>
+<button id="btnNext">步骤前进 ⏩</button>
+</div>
+<div id="stepInfo"><h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p></div>
+<div id="prefixPanel"><h3>前缀和映射</h3><div class="prefix-items" id="prefixItems"></div></div>
+<div id="countPanel"><h3>满足条件的路径数</h3><div class="count-display" id="countVal">0</div></div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=780,H=420;const TARGET=8;
+const tree={val:10,left:{val:5,left:{val:3,left:{val:3,left:null,right:null},right:{val:-2,left:null,right:null}},right:{val:2,left:null,right:{val:1,left:null,right:null}}},right:{val:-3,left:null,right:{val:11,left:null,right:null}}};
+const nodePos={};
+function assignPos(node,x,y,spread){
+  if(!node)return;nodePos[node.val]={x,y,id:Math.random()};
+  assignPos(node.left,x-spread,y+55,spread/2);
+  assignPos(node.right,x+spread,y+55,spread/2);
+}
+assignPos(tree,390,45,155);
+const steps=[];let pathCount=0;const prefixMap={0:1};
+function genSteps(node,curSum,depth,stack){
+  if(!node)return;
+  stack.push(node.val);
+  const newSum=curSum+node.val;
+  steps.push({type:'visit',val:node.val,curSum:newSum,desc:`访问节点 ${node.val}，当前路径和 = ${newSum}`,stack:[...stack],prefixMap:{...prefixMap},pathCount});
+  const need=newSum-TARGET;
+  if(prefixMap[need]!==undefined){
+    pathCount+=prefixMap[need];
+    steps.push({type:'match',val:node.val,curSum:newSum,need,desc:`前缀和 ${need} 存在（出现 ${prefixMap[need]} 次），找到 ${prefixMap[need]} 条路径！路径总数 = ${pathCount}`,stack:[...stack],prefixMap:{...prefixMap},pathCount});
+  }
+  prefixMap[newSum]=(prefixMap[newSum]||0)+1;
+  steps.push({type:'addPrefix',val:node.val,curSum:newSum,desc:`将前缀和 ${newSum} 加入映射`,stack:[...stack],prefixMap:{...prefixMap},pathCount});
+  genSteps(node.left,newSum,depth+1,stack);
+  genSteps(node.right,newSum,depth+1,stack);
+  prefixMap[newSum]--;
+  if(prefixMap[newSum]===0)delete prefixMap[newSum];
+  stack.pop();
+  steps.push({type:'backtrack',val:node.val,curSum,desc:`回溯：移除前缀和 ${newSum}，返回上层`,stack:[...stack],prefixMap:{...prefixMap},pathCount});
+}
+genSteps(tree,0,0,[]);
+let curStep=-1,playing=false,timer=null,curPrefixMap={},curPathCount=0,visitedSet=new Set();
+function rebuildState(){
+  curPrefixMap={0:1};curPathCount=0;visitedSet=new Set();
+  for(let i=0;i<=curStep&&i<steps.length;i++){
+    const s=steps[i];
+    visitedSet.add(s.val);
+    if(s.prefixMap)curPrefixMap={...s.prefixMap};
+    if(s.pathCount!==undefined)curPathCount=s.pathCount;
+  }
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);drawEdges(tree);drawNodes(tree);
+}
+function drawEdges(node){
+  if(!node)return;const p=nodePos[node.val];
+  if(node.left){const q=nodePos[node.left.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawEdges(node.left);}
+  if(node.right){const q=nodePos[node.right.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawEdges(node.right);}
+}
+function drawNodes(node){
+  if(!node)return;const p=nodePos[node.val];const s=curStep>=0?steps[curStep]:null;
+  const isCur=s&&s.val===node.val;const isMatch=s&&s.type==='match'&&s.val===node.val;
+  ctx.beginPath();ctx.arc(p.x,p.y,22,0,Math.PI*2);
+  if(isMatch){ctx.fillStyle='#ffd700';ctx.shadowColor='#ffd700';ctx.shadowBlur=20;}
+  else if(isCur){ctx.fillStyle='#e94560';ctx.shadowColor='#e94560';ctx.shadowBlur=15;}
+  else if(visitedSet.has(node.val)){ctx.fillStyle='#16c79a';ctx.shadowBlur=0;}
+  else{ctx.fillStyle='#0f3460';ctx.shadowBlur=0;}
+  ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle=isMatch?'#ffd700':isCur?'#e94560':'#444';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle=isMatch?'#1a1a2e':'#fff';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(node.val,p.x,p.y);
+  drawNodes(node.left);drawNodes(node.right);
+}
+function renderUI(){
+  draw();const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  const infoEl=document.getElementById('stepInfo');
+  if(s){const tl={visit:'访问节点',match:'找到路径',addPrefix:'更新前缀和',backtrack:'回溯'};
+  infoEl.innerHTML=`<h3>步骤 ${curStep+1} / ${steps.length} — <span class="highlight">${tl[s.type]||s.type}</span></h3><p>${s.desc}</p>`;}
+  else infoEl.innerHTML=`<h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p>`;
+  document.getElementById('countVal').textContent=curPathCount;
+  const pi=document.getElementById('prefixItems');
+  pi.innerHTML=Object.entries(curPrefixMap).filter(([k,v])=>v>0).map(([k,v])=>`<span class="prefix-item${parseInt(k)===s?.curSum-TARGET?' match':''}">${k}×${v}</span>`).join('')||'<span style="color:#888">{0:1}</span>';
+}
+function stepForward(){if(curStep<steps.length-1){curStep++;rebuildState();renderUI();}else stopPlay();}
+function stepBack(){if(curStep>=0){curStep--;rebuildState();renderUI();}}
+function resetAnim(){stopPlay();curStep=-1;rebuildState();renderUI();}
+function startPlay(){if(playing)return;playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)stepForward();else stopPlay();},800);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+document.getElementById('btnPlay').onclick=()=>{if(playing)stopPlay();else startPlay();};
+document.getElementById('btnNext').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btnPrev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btnReset').onclick=resetAnim;
+renderUI();
+</script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>739 - 每日温度</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>739 - 每日温度</h1>
+<p id="desc">给定每日温度数组，对每一天返回下一个更高温度出现在几天后。使用单调递减栈：当前温度高于栈顶时，栈顶出栈并计算天数差。</p>
+<canvas id="cv" width="900" height="460"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="1000" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#16c79a"></span>当前天</span>
+<span><span class="dot" style="background:#0f3460"></span>栈中</span>
+<span><span class="dot" style="background:#e94560"></span>弹出计算</span>
+<span><span class="dot" style="background:#ffd700"></span>已确定</span>
+</div>
+<script>
+const temps=[73,74,75,71,69,72,76,73];
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const n=temps.length;
+  const res=new Array(n).fill(0);
+  let stack=[];
+  steps.push({stack:[...stack],i:-1,res:[...res],action:'init',desc:'初始化：空栈，结果数组全为0',popped:null,days:0});
+  for(let i=0;i<n;i++){
+    steps.push({stack:[...stack],i,res:[...res],action:'check',desc:`考察第 ${i} 天，温度=${temps[i]}°C`,popped:null,days:0});
+    while(stack.length>0&&temps[i]>temps[stack[stack.length-1]]){
+      const top=stack.pop();
+      res[top]=i-top;
+      steps.push({stack:[...stack],i,res:[...res],action:'pop',desc:`弹出栈顶 i=${top}(T=${temps[top]}°C)，当前T=${temps[i]}°C更高，结果[${top}]=${i-top}天后`,popped:top,days:i-top});
+    }
+    stack.push(i);
+    steps.push({stack:[...stack],i,res:[...res],action:'push',desc:`入栈 i=${i}(T=${temps[i]}°C)，栈保持递减`,popped:null,days:0});
+  }
+  steps.push({stack:[],i:n,res:[...res],action:'done',desc:`遍历结束！所有栈中剩余元素结果为0（之后没有更暖和的天）`,popped:null,days:0,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=80,gap=15,totalW=temps.length*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{stack:[],i:-1,res:new Array(temps.length).fill(0),action:'init',popped:null,days:0}:steps[cur];
+  const baseY=200,barMaxH=140;
+  // draw temperature bars
+  const maxT=Math.max(...temps);
+  for(let i=0;i<temps.length;i++){
+    const x=offsetX+i*(cellW+gap);
+    const h=temps[i]*(barMaxH/maxT);
+    let color='#3a3a6a';
+    if(s.stack.includes(i))color='#0f3460';
+    if(s.action==='pop'&&s.popped===i)color='#e94560';
+    if(s.action==='check'&&s.i===i)color='#16c79a';
+    if(s.action==='push'&&s.i===i)color='#16c79a';
+    if(s.res[i]>0)color='#ffd700';
+    ctx.fillStyle=color;
+    ctx.fillRect(x+10,baseY-h,cellW-20,h);
+    // temp label
+    ctx.fillStyle='#eee';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+    ctx.fillText(temps[i]+'°C',x+cellW/2,baseY-h-8);
+    // index
+    ctx.fillStyle='#888';ctx.font='12px sans-serif';
+    ctx.fillText('i='+i,x+cellW/2,baseY+20);
+    // result
+    ctx.fillStyle=s.res[i]>0?'#16c79a':'#666';ctx.font='12px sans-serif';
+    ctx.fillText(s.res[i]>0?`+${s.res[i]}天`:'0',x+cellW/2,baseY+40);
+  }
+  // draw arrow from popped to current for pop action
+  if(s.action==='pop'&&s.popped!==null){
+    const x1=offsetX+s.popped*(cellW+gap)+cellW/2;
+    const x2=offsetX+s.i*(cellW+gap)+cellW/2;
+    ctx.strokeStyle='#e94560';ctx.lineWidth=2;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(x1,baseY-barMaxH-30);ctx.lineTo(x2,baseY-barMaxH-30);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#e94560';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(s.days+'天',(x1+x2)/2,baseY-barMaxH-38);
+  }
+  // stack visualization
+  const stkX=30,stkY=40,stkW=120,cellH=28;
+  ctx.fillStyle='#16213e';ctx.fillRect(stkX,stkY,stkW,300);
+  ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(stkX,stkY,stkW,300);
+  ctx.fillStyle='#16c79a';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+  ctx.fillText('单调栈(递减)',stkX+stkW/2,stkY+18);
+  for(let j=0;j<s.stack.length;j++){
+    const si=s.stack[j];
+    const cy=stkY+28+j*cellH;
+    ctx.fillStyle='#0f3460';
+    ctx.fillRect(stkX+5,cy,stkW-10,cellH-4);
+    ctx.fillStyle='#eee';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`i=${si} T=${temps[si]}°C`,stkX+stkW/2,cy+17);
+  }
+  // result array
+  ctx.fillStyle='#aaa';ctx.font='bold 13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('结果数组:',W-250,30);
+  for(let i=0;i<temps.length;i++){
+    const rx=W-250+i*30;
+    ctx.fillStyle=s.res[i]>0?'#16c79a':'#555';
+    ctx.font='13px sans-serif';ctx.textAlign='center';
+    ctx.fillText(s.res[i],rx+15,52);
+  }
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

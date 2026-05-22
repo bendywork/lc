@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>45 - 跳跃游戏II</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:1.6rem;margin-bottom:8px}
+.subtitle{color:#16c79a;font-size:.95rem;margin-bottom:16px}
+#canvas-wrap{background:#16213e;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+canvas{display:block}
+#desc-panel{background:#16213e;border-radius:10px;padding:14px 20px;width:800px;margin-bottom:12px;min-height:70px;border-left:4px solid #e94560}
+#desc-panel .step-num{color:#16c79a;font-weight:bold;font-size:1.1rem}
+#desc-panel .formula{color:#e94560;font-family:'Courier New',monospace;font-size:1rem;margin-top:6px}
+#desc-panel .explain{color:#b0b0b0;margin-top:4px;font-size:.9rem}
+#controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+button{background:#0f3460;color:#e0e0e0;border:2px solid #e94560;border-radius:8px;padding:8px 18px;font-size:1rem;cursor:pointer;transition:all .2s}
+button:hover{background:#e94560;color:#fff}
+button:active{transform:scale(.95)}
+#speed-label{color:#16c79a;font-size:.9rem}
+#speed{width:80px;accent-color:#e94560}
+.legend{display:flex;gap:16px;margin-top:10px;font-size:.85rem;flex-wrap:wrap;justify-content:center}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend .dot{width:14px;height:14px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>LeetCode 45 - 跳跃游戏II</h1>
+<p class="subtitle">贪心算法 · 最少跳跃次数</p>
+<div id="canvas-wrap"><canvas id="cv" width="800" height="440"></canvas></div>
+<div id="desc-panel">
+  <div class="step-num">步骤 0 / 0</div>
+  <div class="formula"></div>
+  <div class="explain">点击 ▶ 或步骤按钮开始动画</div>
+</div>
+<div id="controls">
+  <button id="btn-reset">⏮ 重置</button>
+  <button id="btn-prev">◀ 上一步</button>
+  <button id="btn-play">▶ 播放</button>
+  <button id="btn-next">▶ 下一步</button>
+  <span id="speed-label">速度</span>
+  <input type="range" id="speed" min="1" max="10" value="4">
+</div>
+<div class="legend">
+  <span><span class="dot" style="background:#16c79a"></span>当前位置</span>
+  <span><span class="dot" style="background:#e94560"></span>当前跳跃范围</span>
+  <span><span class="dot" style="background:#533483"></span>下一跳跃范围</span>
+  <span><span class="dot" style="background:#0f3460"></span>未到达</span>
+</div>
+<script>
+const nums=[2,3,1,1,4,2,1];
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=800,H=440;
+let steps=[],curStep=-1,playing=false,playTimer=null;
+const speedEl=document.getElementById('speed');
+
+function buildSteps(){
+  steps=[];
+  let steps2=0,end=0,farthest=0;
+  steps.push({i:-1,steps:steps2,end,farthest,desc:'初始化',formula:'steps=0, end=0, farthest=0',jumpPoint:-1});
+  for(let i=0;i<nums.length-1;i++){
+    const newFarthest=Math.max(farthest,i+nums[i]);
+    const farthestChanged=newFarthest!==farthest;
+    farthest=newFarthest;
+    steps.push({i,steps:steps2,end,farthest,desc:`i=${i}: 更新最远可达`,formula:`farthest = max(${farthest!==newFarthest?farthest:newFarthest}, ${i}+${nums[i]}) = ${farthest}`,jumpPoint:-1});
+    if(i===end){
+      steps2++;
+      const oldEnd=end;
+      end=farthest;
+      steps.push({i,steps:steps2,end,farthest,desc:`到达当前范围边界，跳跃！`,formula:`steps++ → ${steps2}, end = farthest = ${end}`,jumpPoint:i});
+      if(end>=nums.length-1){
+        steps.push({i,steps:steps2,end,farthest,desc:'已可达终点，结束',formula:`最少跳跃次数 = ${steps2}`});
+        return;
+      }
+    }
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=curStep>=0?steps[curStep]:null;
+  const idx=s?s.i:-1;
+  const stepCount=s?s.steps:0;
+  const endR=s?s.end:0;
+  const farthestR=s?s.farthest:0;
+  const jumpPt=s?s.jumpPoint:-1;
+
+  const cellW=80,cellH=60,gap=8;
+  const totalW=nums.length*cellW+(nums.length-1)*gap;
+  const startX=(W-totalW)/2;
+  const arrY=60;
+
+  // Draw array
+  ctx.fillStyle='#e0e0e0';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('跳跃数组 nums[]',W/2,arrY-30);
+
+  for(let i=0;i<nums.length;i++){
+    const x=startX+i*(cellW+gap),y=arrY;
+    let bg='#0f3460';
+    if(s){
+      if(i<=idx)bg='#333';
+      if(i<=endR)bg='#e9456033';
+      if(i<=farthestR&&i>endR)bg='#53348344';
+      if(i===idx)bg='#16c79a55';
+      if(i===jumpPt)bg='#16c79a88';
+      if(i>idx)bg='#0f346066';
+    }
+    ctx.fillStyle=bg;
+    ctx.beginPath();ctx.roundRect(x,y,cellW,cellH,8);ctx.fill();
+    ctx.strokeStyle=i===idx?'#16c79a':i===jumpPt?'#16c79a':'#444';
+    ctx.lineWidth=i===idx||i===jumpPt?3:1;ctx.stroke();
+
+    ctx.fillStyle='#e0e0e0';ctx.font='bold 22px sans-serif';ctx.textAlign='center';
+    ctx.fillText(nums[i],x+cellW/2,y+cellH/2+7);
+    ctx.fillStyle='#888';ctx.font='11px sans-serif';
+    ctx.fillText(i,x+cellW/2,y+cellH+14);
+  }
+
+  // Range indicators
+  if(s){
+    const rx1=startX,rx2=startX+endR*(cellW+gap)+cellW;
+    const fx2=startX+farthestR*(cellW+gap)+cellW;
+
+    // current range
+    ctx.fillStyle='#e9456022';
+    ctx.fillRect(rx1,arrY-4,endR<nums.length?rx2-rx1:W-rx1,cellH+8);
+
+    // next range
+    if(farthestR>endR){
+      ctx.fillStyle='#53348322';
+      ctx.fillRect(rx2,arrY-4,fx2-rx2,cellH+8);
+    }
+
+    // range labels
+    ctx.textAlign='center';
+    ctx.fillStyle='#e94560';ctx.font='bold 12px sans-serif';
+    ctx.fillText('当前跳跃范围 [0,'+endR+']',(rx1+rx2)/2,arrY+cellH+30);
+    if(farthestR>endR){
+      ctx.fillStyle='#533483';
+      ctx.fillText('下一范围 ['+(endR+1)+','+farthestR+']',(rx2+fx2)/2,arrY+cellH+30);
+    }
+  }
+
+  // Jump arrows
+  if(s&&jumpPt>=0){
+    const fromX=startX+jumpPt*(cellW+gap)+cellW/2;
+    const toX=Math.min(startX+farthestR*(cellW+gap)+cellW/2,W-20);
+    const arrowY=arrY+cellH+48;
+    ctx.strokeStyle='#16c79a';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(fromX,arrowY);ctx.lineTo(toX,arrowY);ctx.stroke();
+    // arrowhead
+    ctx.fillStyle='#16c79a';
+    ctx.beginPath();ctx.moveTo(toX,arrowY-8);ctx.lineTo(toX+12,arrowY);ctx.lineTo(toX,arrowY+8);ctx.fill();
+    ctx.fillStyle='#16c79a';ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`第${stepCount}跳: 从${jumpPt}跳到${farthestR}`,(fromX+toX)/2,arrowY-10);
+  }
+
+  // Stats panel
+  const statY=arrY+cellH+80;
+  ctx.fillStyle='#16213e';ctx.fillRect(startX,statY,totalW,90);
+  ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.strokeRect(startX,statY,totalW,90);
+  ctx.textAlign='left';
+  ctx.fillStyle='#16c79a';ctx.font='bold 18px sans-serif';
+  ctx.fillText(`跳跃次数: ${stepCount}`,startX+20,statY+30);
+  ctx.fillStyle='#e94560';ctx.font='bold 16px sans-serif';
+  ctx.fillText(`当前范围终点: ${endR}    最远可达: ${farthestR}`,startX+20,statY+60);
+  ctx.fillStyle='#e0e0e0';ctx.font='14px sans-serif';
+  ctx.fillText(endR>=nums.length-1?'已到达终点!':'',startX+20,statY+82);
+}
+
+function updateDesc(){
+  const panel=document.getElementById('desc-panel');
+  if(curStep<0){panel.innerHTML=`<div class="step-num">步骤 0 / ${steps.length}</div><div class="explain">点击 ▶ 或步骤按钮开始动画</div>`;return;}
+  const s=steps[curStep];
+  panel.innerHTML=`<div class="step-num">步骤 ${curStep+1} / ${steps.length}</div><div class="formula">${s.formula}</div><div class="explain">${s.desc}</div>`;
+}
+
+function stepForward(){if(curStep<steps.length-1){curStep++;draw();updateDesc();}else stopPlay();}
+function stepBack(){if(curStep>0){curStep--;draw();updateDesc();}else{curStep=-1;draw();updateDesc();}}
+function startPlay(){if(playing)return;if(curStep>=steps.length-1)curStep=-1;playing=true;document.getElementById('btn-play').textContent='⏸ 暂停';tick();}
+function tick(){if(!playing)return;stepForward();if(curStep>=steps.length-1){stopPlay();return;}playTimer=setTimeout(tick,1200/speedEl.value);}
+function stopPlay(){playing=false;clearTimeout(playTimer);document.getElementById('btn-play').textContent='▶ 播放';}
+function reset(){stopPlay();curStep=-1;draw();updateDesc();}
+
+document.getElementById('btn-play').onclick=()=>playing?stopPlay():startPlay();
+document.getElementById('btn-next').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btn-prev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btn-reset').onclick=reset;
+
+buildSteps();draw();updateDesc();
+</script>
+</body>
+</html>

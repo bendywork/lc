@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>56 - 合并区间</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>56 - 合并区间</h1>
+<p id="desc">给定一组区间，合并所有重叠区间。先按左端点排序，再逐个判断：若当前区间与结果最后一个重叠则合并，否则直接加入。</p>
+<canvas id="cv" width="900" height="500"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="1000" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#1a8fdd"></span>当前区间</span>
+<span><span class="dot" style="background:#16c79a"></span>结果区间</span>
+<span><span class="dot" style="background:#e94560"></span>重叠合并</span>
+<span><span class="dot" style="background:#ffd700"></span>当前考察</span>
+</div>
+<script>
+const intervals=[[1,3],[2,6],[8,10],[15,18]];
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const sorted=intervals.map(r=>[...r]).sort((a,b)=>a[0]-b[0]);
+  const res=[[...sorted[0]]];
+  steps.push({sorted,curIdx:-1,res:[...res.map(r=>[...r])],action:'init',desc:'排序后区间: '+sorted.map(r=>'['+r+']').join(', ')});
+  for(let i=1;i<sorted.length;i++){
+    const cur=sorted[i];
+    const last=res[res.length-1];
+    steps.push({sorted,curIdx:i,res:res.map(r=>[...r]),action:'check',desc:`考察 [${cur}]，与结果末尾 [${last}] 比较`});
+    if(cur[0]<=last[1]){
+      const oldEnd=last[1];
+      last[1]=Math.max(last[1],cur[1]);
+      steps.push({sorted,curIdx:i,res:res.map(r=>[...r]),action:'merge',desc:`[${cur}]与[${[last[0],oldEnd]}]重叠！合并 → [${last}]`,mergedFrom:[last[0],oldEnd],mergedTo:[...last]});
+    }else{
+      res.push([...cur]);
+      steps.push({sorted,curIdx:i,res:res.map(r=>[...r]),action:'add',desc:`[${cur}]不重叠，直接加入结果`});
+    }
+  }
+  steps.push({sorted,curIdx:-1,res:res.map(r=>[...r]),action:'done',desc:`合并完成！结果: ${res.map(r=>'['+r+']').join(', ')}`,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const maxX=20,scaleX=35,baseY=200;
+
+function drawInterval(x1,x2,y,color,label,highlight){
+  const px1=40+x1*scaleX,px2=40+x2*scaleX;
+  ctx.fillStyle=color;
+  ctx.fillRect(px1,y,px2-px1,24);
+  ctx.strokeStyle=highlight||'#0f3460';ctx.lineWidth=highlight?2:1;
+  ctx.strokeRect(px1,y,px2-px1,24);
+  ctx.fillStyle='#eee';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText(label,(px1+px2)/2,y+16);
+  // start/end labels
+  ctx.fillStyle='#888';ctx.font='10px sans-serif';
+  ctx.fillText(x1,px1,y-4);
+  ctx.fillText(x2,px2,y-4);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{sorted:intervals.map(r=>[...r]).sort((a,b)=>a[0]-b[0]),curIdx:-1,res:[[...intervals.map(r=>[...r]).sort((a,b)=>a[0]-b[0])[0]]],action:'init'}:steps[cur];
+  // number line
+  ctx.strokeStyle='#333';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(40,baseY);ctx.lineTo(40+maxX*scaleX,baseY);ctx.stroke();
+  for(let i=0;i<=maxX;i+=5){
+    ctx.fillStyle='#666';ctx.font='10px sans-serif';ctx.textAlign='center';
+    ctx.fillText(i,40+i*scaleX,baseY+16);
+    ctx.strokeStyle='#333';ctx.beginPath();ctx.moveTo(40+i*scaleX,baseY-3);ctx.lineTo(40+i*scaleX,baseY+3);ctx.stroke();
+  }
+  // sorted intervals
+  ctx.fillStyle='#aaa';ctx.font='bold 13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('排序后区间:',40,60);
+  for(let i=0;i<s.sorted.length;i++){
+    const y=75+i*35;
+    let color='#2a2a4a';
+    if(s.curIdx===i)color='#ffd700';
+    if(s.action==='merge'&&s.curIdx===i)color='#e94560';
+    drawInterval(s.sorted[i][0],s.sorted[i][1],y,color,`[${s.sorted[i]}]`);
+  }
+  // result intervals
+  const resY=340;
+  ctx.fillStyle='#16c79a';ctx.font='bold 13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('合并结果:',40,resY-15);
+  for(let i=0;i<s.res.length;i++){
+    const y=resY+i*35;
+    drawInterval(s.res[i][0],s.res[i][1],y,'#1a4a3a',`[${s.res[i]}]`,'#16c79a');
+  }
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

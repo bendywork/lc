@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>32-最长有效括号</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:320px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.string-row{display:flex;gap:2px;margin:12px 0;justify-content:center}
+.s-char{width:32px;height:32px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;font-family:monospace;background:#0f3460;border:2px solid #333;transition:all .3s}
+.s-char.current{border-color:#e94560;color:#e94560;background:#e9456022}
+.s-char.valid{border-color:#16c79a;color:#16c79a;background:#16c79a22}
+.s-char.invalid{border-color:#555;color:#555}
+.s-char.in-valid-sub{background:#16c79a44;border-color:#16c79a;color:#16c79a}
+.stack-container{display:flex;flex-direction:column-reverse;align-items:center;min-height:180px;gap:3px;padding:8px;border:2px dashed #333;border-radius:8px;background:#0f346022}
+.stack-item{width:46px;height:38px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;font-family:monospace;background:#16c79a33;border:2px solid #16c79a;color:#16c79a;animation:slideIn .3s ease}
+.stack-item.idx-item{background:#e9456033;border-color:#e94560;color:#e94560;font-size:12px}
+@keyframes slideIn{from{transform:translateY(-15px);opacity:0}to{transform:translateY(0);opacity:1}}
+.stats{display:flex;gap:16px;margin-top:12px}
+.stat-item{background:#0f3460;border-radius:8px;padding:8px 14px;text-align:center}
+.stat-label{color:#aaa;font-size:11px}.stat-val{color:#16c79a;font-size:22px;font-weight:bold;font-family:monospace}
+.stat-val.max{color:#e94560}
+.result-box{margin-top:12px;padding:12px;border-radius:8px;font-size:16px;font-weight:bold;text-align:center;background:#16c79a22;border:1px solid #16c79a;color:#16c79a;display:none}
+</style>
+</head>
+<body>
+<h1>32 - 最长有效括号</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">输入字符串</div>
+<div style="color:#aaa;font-size:13px">s = ")()())"</div>
+<div class="string-row" id="stringRow"></div>
+<div style="margin-top:8px;color:#aaa;font-size:13px">当前位置: <span id="curPos" style="color:#e94560;font-family:monospace">-</span></div>
+<div class="stats">
+<div class="stat-item"><div class="stat-label">当前最长</div><div class="stat-val" id="maxLen">0</div></div>
+<div class="stat-item"><div class="stat-label">有效子串起始</div><div class="stat-val" id="validStart">-</div></div>
+<div class="stat-item"><div class="stat-label">栈顶索引</div><div class="stat-val" id="stackTop">-</div></div>
+</div>
+<div class="result-box" id="resultBox"></div>
+</div>
+<div class="panel">
+<div class="panel-title">栈 (存储索引)</div>
+<div style="color:#aaa;font-size:12px;margin-bottom:6px">栈中存储索引，-1为哨兵</div>
+<div class="stack-container" id="stackContainer">
+<div style="color:#555;font-size:14px">空栈</div>
+</div>
+<div style="margin-top:8px;color:#aaa;font-size:12px;text-align:center">栈顶 ↑ | 栈底 ↓</div>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const S=")()())";
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function buildStringRow(idx,validRanges,curMaxLen){
+  const row=document.getElementById('stringRow');row.innerHTML='';
+  S.split('').forEach((ch,i)=>{
+    let cls=i===idx?'current':'invalid';
+    if(validRanges){
+      for(const [s,e] of validRanges){
+        if(i>=s&&i<=e){cls='in-valid-sub';break;}
+      }
+    }
+    row.innerHTML+=`<div class="s-char ${cls}">${ch}</div>`;
+  });
+}
+
+function buildStack(stack){
+  const sc=document.getElementById('stackContainer');sc.innerHTML='';
+  if(stack.length===0){sc.innerHTML='<div style="color:#555;font-size:14px">空栈</div>';return;}
+  stack.forEach(idx=>{
+    const cls=idx===-1?'idx-item':'idx-item';
+    sc.innerHTML+=`<div class="stack-item ${cls}">${idx}</div>`;
+  });
+}
+
+function generateSteps(){
+  steps=[];
+  const stack=[-1];
+  let maxLen=0;
+  const validRanges=[];
+  steps.push({type:'start',stack:[-1],idx:-1,maxLen:0,validRanges:[],
+    desc:`初始化：栈 = [-1]（哨兵），maxLen = 0`});
+  for(let i=0;i<S.length;i++){
+    const ch=S[i];
+    if(ch==='('){
+      stack.push(i);
+      steps.push({type:'push',stack:[...stack],idx:i,maxLen,validRanges:[...validRanges],ch,
+        desc:`s[${i}]='${ch}' 左括号，入栈索引 ${i} → 栈: [${stack.join(',')}]`});
+    }else{
+      if(stack.length>1){
+        const top=stack.pop();
+        const startIdx=stack[stack.length-1];
+        const len=i-startIdx;
+        if(len>maxLen){
+          maxLen=len;
+          validRanges.push([startIdx+1,i]);
+        }
+        steps.push({type:'match',stack:[...stack],idx:i,maxLen,validRanges:[...validRanges],ch,poppedIdx:top,matchedFrom:startIdx+1,matchedLen:len,
+          desc:`s[${i}]='${ch}' 右括号，弹出栈顶 ${top}，有效子串 [${startIdx+1}..${i}]，长度=${len}，maxLen=${maxLen}`});
+      }else{
+        steps.push({type:'reset',stack:[...stack],idx:i,maxLen,validRanges:[...validRanges],ch,
+          desc:`s[${i}]='${ch}' 右括号，但栈只有哨兵 -1，无法匹配，重置栈底为 ${i}`});
+        stack.pop();stack.push(i);
+        steps.push({type:'push_sentinel',stack:[...stack],idx:i,maxLen,validRanges:[...validRanges],
+          desc:`栈底更新为 ${i} → 栈: [${stack.join(',')}]`});
+      }
+    }
+  }
+  steps.push({type:'done',stack:[...stack],idx:S.length,maxLen,validRanges:[...validRanges],
+    desc:`扫描完成，最长有效括号长度 = ${maxLen}`});
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildStringRow(step.idx,step.validRanges,step.maxLen);
+  document.getElementById('curPos').textContent=step.idx>=0?step.idx:'-';
+  buildStack(step.stack);
+  document.getElementById('maxLen').textContent=step.maxLen;
+  document.getElementById('validStart').textContent=step.stack.length>0?step.stack[step.stack.length-1]:'-';
+  document.getElementById('stackTop').textContent=step.stack.length>0?step.stack[step.stack.length-1]:'-';
+  if(step.type==='done'){
+    const rb=document.getElementById('resultBox');rb.style.display='block';
+    rb.textContent=`最长有效括号长度: ${step.maxLen}`;
+  }else{document.getElementById('resultBox').style.display='none';}
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},900);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  document.getElementById('resultBox').style.display='none';
+  buildStringRow(-1);buildStack([-1]);
+  document.getElementById('curPos').textContent='-';
+  document.getElementById('maxLen').textContent='0';
+  document.getElementById('validStart').textContent='-';
+  document.getElementById('stackTop').textContent='-1';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){currentStep--;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildStringRow(-1);buildStack([-1]);
+</script>
+</body>
+</html>

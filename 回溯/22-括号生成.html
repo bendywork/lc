@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>22-括号生成</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:300px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+canvas{display:block;margin:0 auto;background:#0f3460;border-radius:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.highlight{color:#e94560;font-weight:bold}
+.result-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.result-tag{background:#0f3460;color:#16c79a;padding:3px 8px;border-radius:4px;font-size:13px;font-family:monospace}
+.result-tag.current{background:#e94560;color:#fff}
+.paren-bar{display:flex;align-items:flex-end;gap:2px;margin-top:10px;height:40px}
+.paren-char{font-size:24px;font-family:monospace;transition:all .3s}
+.paren-char.lp{color:#16c79a}.paren-char.rp{color:#e94560}
+.tracker{display:flex;gap:20px;margin-top:10px}
+.tracker-item{background:#0f3460;border-radius:8px;padding:8px 16px;text-align:center}
+.tracker-label{color:#aaa;font-size:11px}.tracker-val{color:#16c79a;font-size:24px;font-weight:bold;font-family:monospace}
+</style>
+</head>
+<body>
+<h1>22 - 括号生成</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">决策树 (加 '(' 或 ')')</div>
+<canvas id="treeCanvas" width="560" height="440"></canvas>
+</div>
+<div class="panel">
+<div class="panel-title">当前构建过程</div>
+<div style="color:#aaa;font-size:13px">n = 3，生成所有有效的括号组合</div>
+<div id="parenDisplay" class="paren-bar" style="min-height:40px"></div>
+<div class="tracker">
+<div class="tracker-item"><div class="tracker-label">左括号已用</div><div class="tracker-val" id="openCount">0</div></div>
+<div class="tracker-item"><div class="tracker-label">右括号已用</div><div class="tracker-val" id="closeCount">0</div></div>
+<div class="tracker-item"><div class="tracker-label">剩余可用左</div><div class="tracker-val" id="openRemain">3</div></div>
+</div>
+<div style="margin-top:16px"><div style="color:#aaa;font-size:13px;margin-bottom:6px">有效组合:</div><div class="result-list" id="resultList"></div></div>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const canvas=document.getElementById('treeCanvas');
+const ctx=canvas.getContext('2d');
+const N=3;
+let steps=[];
+let currentStep=0;
+let playing=false;
+let timer=null;
+
+function generateSteps(){
+  steps=[];
+  const treeNodes=[];
+  let nid=0;
+  function dfs(path,open,close,parentId,depth){
+    const id=nid++;
+    const node={id,path,open,close,depth,children:[],isResult:false,cut:false};
+    treeNodes.push(node);
+    if(parentId!==null){const p=treeNodes.find(n=>n.id===parentId);if(p)p.children.push(id);}
+    if(path.length===2*N){
+      node.isResult=true;
+      steps.push({type:'result',path,open,close,depth,nodes:[...treeNodes],nodeId:id,
+        desc:`构建完成！有效组合: "${path}"`});
+      return;
+    }
+    if(open<N){
+      steps.push({type:'try_open',path:path+'(',open:open+1,close,depth,nodes:[...treeNodes],nodeId:id,
+        desc:`选择加 '(' → "${path}("，左括号=${open+1}，右括号=${close}`});
+      dfs(path+'(',open+1,close,id,depth+1);
+    }
+    if(close<open){
+      steps.push({type:'try_close',path:path+')',open,close:close+1,depth,nodes:[...treeNodes],nodeId:id,
+        desc:`选择加 ')' → "${path})"，左括号=${open}，右括号=${close+1}`});
+      dfs(path+')',open,close+1,id,depth+1);
+    }
+    steps.push({type:'backtrack',path,open,close,depth,nodes:[...treeNodes],nodeId:id,
+      desc:`回溯：从 "${path}" 返回上一层`});
+  }
+  steps.push({type:'start',path:'',open:0,close:0,depth:0,nodes:[],nodeId:null,
+    desc:`开始DFS，n=${N}，生成所有有效括号组合`});
+  dfs('',0,0,null,0);
+  steps.push({type:'done',path:'',open:N,close:N,depth:0,nodes:[],nodeId:null,
+    desc:`搜索完成，共找到 ${steps.filter(s=>s.type==='result').length} 个有效组合`});
+}
+
+function layoutNodes(nodes){
+  const pos={};
+  const leaves=[];
+  function getLeaves(node){
+    if(node.children.length===0){leaves.push(node.id);return;}
+    node.children.forEach(cid=>{const c=nodes.find(n=>n.id===cid);if(c)getLeaves(c);});
+  }
+  if(nodes.length>0)getLeaves(nodes[0]);
+  const lw=60;
+  const tw=leaves.length*lw;
+  const sx=Math.max(30,(560-tw)/2);
+  const lm={};leaves.forEach((lid,i)=>lm[lid]=sx+i*lw+lw/2);
+  function posNode(node){
+    if(node.children.length===0){pos[node.id]={x:lm[node.id]||280,y:40+node.depth*55};return pos[node.id].x;}
+    let sum=0;
+    node.children.forEach(cid=>{const c=nodes.find(n=>n.id===cid);if(c)sum+=posNode(c);});
+    const avg=sum/node.children.length;
+    pos[node.id]={x:avg,y:40+node.depth*55};
+    return avg;
+  }
+  if(nodes.length>0)posNode(nodes[0]);
+  return pos;
+}
+
+function drawTree(step){
+  ctx.clearRect(0,0,560,440);
+  if(!step||!step.nodes||step.nodes.length===0){
+    ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,200);return;
+  }
+  const nodes=step.nodes;
+  const pos=layoutNodes(nodes);
+  nodes.forEach(node=>{
+    const p=pos[node.id];if(!p)return;
+    node.children.forEach(cid=>{
+      const cp=pos[cid];if(!cp)return;
+      const isOnPath=step.path&&step.path.length>0&&node.path!==undefined&&step.path.startsWith(node.path);
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(cp.x,cp.y);
+      ctx.strokeStyle=isOnPath?'#16c79a':'#333';ctx.lineWidth=isOnPath?2:1;ctx.stroke();
+    });
+  });
+  nodes.forEach(node=>{
+    const p=pos[node.id];if(!p)return;
+    const isCurrent=step.nodeId===node.id;
+    const isOnPath=step.path&&node.path!==undefined&&step.path.startsWith(node.path);
+    const r=isCurrent?18:isOnPath?15:12;
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);
+    ctx.fillStyle=isCurrent?'#e94560':isOnPath?'#16c79a':node.isResult?'#0f3460':'#16213e';
+    ctx.fill();
+    ctx.strokeStyle=isCurrent?'#e94560':isOnPath?'#16c79a':'#555';
+    ctx.lineWidth=isCurrent?2.5:1;ctx.stroke();
+    if(node.isResult){
+      ctx.fillStyle='#16c79a';ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(node.path,p.x,p.y);
+    }else{
+      ctx.fillStyle='#ccc';ctx.font='9px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+      const lbl=node.path||'root';
+      ctx.fillText(lbl.length>4?lbl.slice(-4):lbl,p.x,p.y);
+    }
+  });
+}
+
+function updateUI(step){
+  if(!step)return;
+  const pd=document.getElementById('parenDisplay');
+  pd.innerHTML='';
+  if(step.path){
+    step.path.split('').forEach(c=>{
+      const span=document.createElement('span');
+      span.className='paren-char '+(c==='('? 'lp':'rp');
+      span.textContent=c;pd.appendChild(span);
+    });
+  }
+  document.getElementById('openCount').textContent=step.open||0;
+  document.getElementById('closeCount').textContent=step.close||0;
+  document.getElementById('openRemain').textContent=N-(step.open||0);
+  if(step.type==='result'){
+    const rl=document.getElementById('resultList');
+    const tag=document.createElement('span');
+    tag.className='result-tag current';tag.textContent=step.path;
+    rl.appendChild(tag);
+  }else{
+    document.querySelectorAll('.result-tag.current').forEach(t=>t.classList.remove('current'));
+  }
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  drawTree(step);
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){
+  if(currentStep>=steps.length-1)reset();
+  playing=true;
+  document.getElementById('btnPlay').disabled=true;
+  document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},700);
+}
+function pause(){
+  playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;
+}
+function reset(){
+  pause();currentStep=0;
+  document.getElementById('resultList').innerHTML='';
+  document.getElementById('parenDisplay').innerHTML='';
+  document.getElementById('openCount').textContent='0';
+  document.getElementById('closeCount').textContent='0';
+  document.getElementById('openRemain').textContent=N;
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  ctx.clearRect(0,0,560,440);ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,200);
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();
+}
+function nextStep(){
+  if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;
+}
+function prevStep(){
+  if(currentStep>0){
+    currentStep--;
+    document.getElementById('resultList').innerHTML='';
+    for(let i=0;i<=currentStep;i++){if(steps[i].type==='result'){
+      const tag=document.createElement('span');tag.className='result-tag';tag.textContent=steps[i].path;
+      document.getElementById('resultList').appendChild(tag);
+    }}
+    updateUI(steps[currentStep]);
+  }
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;
+}
+generateSteps();ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,200);
+</script>
+</body>
+</html>

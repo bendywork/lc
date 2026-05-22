@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>49 - 字母异位词分组</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.header{width:100%;background:linear-gradient(135deg,#16213e,#0f3460);padding:24px 0;text-align:center;border-bottom:2px solid #e94560}
+.header h1{font-size:28px;color:#e94560;margin-bottom:6px}
+.header p{color:#aaa;font-size:14px}
+.example{background:#16213e;border-radius:12px;padding:18px 28px;margin:20px auto;max-width:800px;border:1px solid #333;width:90%}
+.example h3{color:#16c79a;margin-bottom:8px;font-size:16px}
+.example pre{color:#ccc;font-size:14px;line-height:1.6;white-space:pre-wrap}
+.canvas-box{background:#16213e;border-radius:12px;border:1px solid #333;margin:12px auto;max-width:1100px;width:95%;overflow:hidden}
+.canvas-box h3{text-align:center;padding:10px;color:#16c79a;font-size:15px;border-bottom:1px solid #333}
+canvas{display:block;margin:0 auto}
+.desc-panel{background:#16213e;border-radius:12px;padding:16px 24px;margin:12px auto;max-width:1100px;width:95%;border:1px solid #333;min-height:60px}
+.desc-panel .step-counter{color:#e94560;font-size:13px;margin-bottom:6px}
+.desc-panel .step-text{color:#eee;font-size:15px;line-height:1.6}
+.controls{display:flex;gap:12px;justify-content:center;margin:16px auto;flex-wrap:wrap}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:8px;padding:10px 22px;font-size:15px;cursor:pointer;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+.controls button:active{transform:scale(.95)}
+.spacer{height:30px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>LeetCode 49 - 字母异位词分组</h1>
+  <p>Group Anagrams | 排序键哈希法</p>
+</div>
+<div class="example">
+  <h3>示例</h3>
+  <pre>输入：strs = ["eat","tea","tan","ate","nat","bat"]
+输出：[["bat"],["nat","tan"],["ate","eat","tea"]]
+解释：字母异位词是由相同字母重新排列组成的单词</pre>
+</div>
+<div class="canvas-box">
+  <h3>字符串处理与分组</h3>
+  <canvas id="mainCanvas" width="1060" height="620"></canvas>
+</div>
+<div class="desc-panel">
+  <div class="step-counter" id="stepCounter">步骤 0 / 0</div>
+  <div class="step-text" id="stepText">点击「播放」或「步骤前进」开始动画</div>
+</div>
+<div class="controls">
+  <button onclick="reset()">⏮ 重置</button>
+  <button onclick="prevStep()">◀ 步骤后退</button>
+  <button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+  <button onclick="nextStep()">步骤前进 ▶</button>
+</div>
+<div class="spacer"></div>
+
+<script>
+const strs=["eat","tea","tan","ate","nat","bat"];
+const ctx=document.getElementById('mainCanvas').getContext('2d');
+const W=1060,H=620;
+const C={bg:'#1a1a2e',card:'#16213e',accent:'#e94560',hi:'#16c79a',text:'#eee',dim:'#555',found:'#ffdd57',
+  groupColors:['#e94560','#16c79a','#3498db','#f39c12','#9b59b6','#1abc9c','#e67e22','#2ecc71']};
+
+function genSteps(){
+  const steps=[];
+  const groups={};
+  steps.push({desc:'初始状态：遍历每个字符串，将字符排序后作为哈希键进行分组',curIdx:-1,curStr:null,sortedKey:null,groups:{},phase:'init'});
+  for(let i=0;i<strs.length;i++){
+    const s=strs[i];
+    const sorted=s.split('').sort().join('');
+    steps.push({desc:`取出 strs[${i}] = "${s}"`,curIdx:i,curStr:s,sortedKey:null,groups:deepCopy(groups),phase:'pick'});
+    steps.push({desc:`排序字符："${s}" → "${s.split('').join(' ')}" → "${sorted}"`,curIdx:i,curStr:s,sortedKey:sorted,groups:deepCopy(groups),phase:'sort',charsBefore:s,charsAfter:sorted});
+    if(!groups[sorted]) groups[sorted]=[];
+    groups[sorted].push(s);
+    steps.push({desc:`将 "${s}" 加入分组键 "${sorted}"，该组现有 [${groups[sorted].map(x=>`"${x}"`).join(',')}]`,curIdx:i,curStr:s,sortedKey:sorted,groups:deepCopy(groups),phase:'group'});
+  }
+  const result=Object.values(groups);
+  steps.push({desc:`分组完成！共 ${result.length} 组字母异位词`,curIdx:-1,curStr:null,sortedKey:null,groups:deepCopy(groups),phase:'done'});
+  return steps;
+}
+
+function deepCopy(obj){return JSON.parse(JSON.stringify(obj));}
+
+let steps=genSteps(),curStep=0,playing=false,timer=null;
+
+function rr(c,x,y,w,h,r,f,s){c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(f)c.fill();if(s)c.stroke();}
+
+function render(){
+  const step=steps[curStep];
+  ctx.clearRect(0,0,W,H);
+
+  // 1. String list at top
+  const sy=20;
+  ctx.fillStyle=C.hi;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('字符串数组',W/2,sy);
+  const cw=100,ch=36,gap=12;
+  const tw=strs.length*(cw+gap)-gap;
+  const sx=(W-tw)/2,ay=sy+16;
+  for(let i=0;i<strs.length;i++){
+    const x=sx+i*(cw+gap);
+    const isCur=step.curIdx===i;
+    const isProcessed=step.curIdx>i||(step.phase==='done');
+    ctx.fillStyle=isCur?C.accent:isProcessed?C.hi:C.card;
+    ctx.strokeStyle=isCur?C.accent:isProcessed?C.hi:C.dim;ctx.lineWidth=isCur?3:isProcessed?2:1;
+    rr(ctx,x,ay,cw,ch,6,true,true);
+    ctx.fillStyle=isCur?'#fff':isProcessed?'#1a1a2e':C.text;ctx.font='bold 15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(strs[i],x+cw/2,ay+ch/2);
+  }
+
+  // 2. Sort animation area (middle)
+  const sortY=110;
+  if(step.phase==='sort'||step.phase==='group'){
+    const s=step.charsBefore;
+    const sorted=step.charsAfter;
+    // Before sort
+    ctx.fillStyle=C.dim;ctx.font='13px sans-serif';ctx.textAlign='center';
+    ctx.fillText('原始字符',W/2-200,sortY);
+    const bcw=36,bch=40,bgap=6;
+    const btw=s.length*(bcw+bgap)-bgap;
+    const bsx=W/2-200-btw/2;
+    for(let j=0;j<s.length;j++){
+      const x=bsx+j*(bcw+bgap);
+      ctx.fillStyle=C.card;ctx.strokeStyle=C.accent;ctx.lineWidth=1;
+      rr(ctx,x,sortY+8,bcw,bch,6,true,true);
+      ctx.fillStyle=C.accent;ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(s[j],x+bcw/2,sortY+8+bch/2);
+    }
+    // Arrow
+    ctx.fillStyle=C.hi;ctx.font='bold 24px sans-serif';ctx.textAlign='center';
+    ctx.fillText('→',W/2,sortY+28);
+    // After sort
+    ctx.fillStyle=C.dim;ctx.font='13px sans-serif';
+    ctx.fillText('排序后',W/2+200,sortY);
+    const asx=W/2+200-btw/2;
+    for(let j=0;j<sorted.length;j++){
+      const x=asx+j*(bcw+bgap);
+      ctx.fillStyle=C.hi;ctx.strokeStyle=C.hi;ctx.lineWidth=2;
+      rr(ctx,x,sortY+8,bcw,bch,6,true,true);
+      ctx.fillStyle='#1a1a2e';ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(sorted[j],x+bcw/2,sortY+8+bch/2);
+    }
+    // Key label
+    ctx.fillStyle=C.found;ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`哈希键: "${sorted}"`,W/2,sortY+70);
+  }
+
+  // 3. Groups visualization (bottom)
+  const groupStartY=210;
+  ctx.fillStyle=C.hi;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('分组结果',W/2,groupStartY);
+  const entries=Object.entries(step.groups);
+  const groupW=160,groupH_perItem=36,groupPad=12,groupGap=20;
+  const cols=Math.min(entries.length,3);
+  const totalGW=cols*groupW+(cols-1)*groupGap;
+  const gsx=(W-totalGW)/2;
+
+  entries.forEach(([key,items],gi)=>{
+    const col=gi%cols,row=Math.floor(gi/cols);
+    const gx=gsx+col*(groupW+groupGap);
+    const gy=groupStartY+20+row*(groupH_perItem*4+groupPad*2+30);
+    const color=C.groupColors[gi%C.groupColors.length];
+    const isCurGroup=step.sortedKey===key;
+
+    // Group box
+    const gFullH=groupPad*2+Math.max(items.length,1)*groupH_perItem+24;
+    ctx.fillStyle=isCurGroup?color+'33':C.card;ctx.strokeStyle=isCurGroup?color:C.dim;ctx.lineWidth=isCurGroup?3:1;
+    rr(ctx,gx-4,gy,groupW+8,gFullH,10,true,true);
+    // Key label
+    ctx.fillStyle=color;ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`键: "${key}"`,gx+groupW/2,gy+16);
+    // Items
+    items.forEach((item,ii)=>{
+      const iy=gy+26+ii*groupH_perItem;
+      const isCurItem=step.curStr===item&&isCurGroup;
+      ctx.fillStyle=isCurItem?color:C.bg;ctx.strokeStyle=color;ctx.lineWidth=1;
+      rr(ctx,gx+8,iy,groupW-16,groupH_perItem-4,6,true,true);
+      ctx.fillStyle=isCurItem?'#fff':C.text;ctx.font='14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(item,gx+groupW/2,iy+(groupH_perItem-4)/2);
+    });
+  });
+
+  // Done overlay
+  if(step.phase==='done'){
+    ctx.fillStyle=C.found;ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+    const allGroups=Object.values(step.groups);
+    ctx.fillText(`共 ${allGroups.length} 组字母异位词`,W/2,H-30);
+  }
+
+  document.getElementById('stepCounter').textContent=`步骤 ${curStep} / ${steps.length-1}`;
+  document.getElementById('stepText').textContent=step.desc;
+}
+
+function reset(){stopPlay();curStep=0;render();}
+function nextStep(){if(curStep<steps.length-1){curStep++;render();}else stopPlay();}
+function prevStep(){if(curStep>0){curStep--;render();}}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)nextStep();else stopPlay();},1200);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+render();
+</script>
+</body>
+</html>

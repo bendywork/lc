@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>283 - 移动零</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:800px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>283 - 移动零</h1>
+<p id="desc">给定数组 nums，将所有 0 移动到数组末尾，同时保持非零元素的相对顺序。使用快慢指针：快指针遍历，遇到非零则与慢指针位置交换。</p>
+<canvas id="cv" width="800" height="380"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="800" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#16c79a"></span>慢指针 slow</span>
+<span><span class="dot" style="background:#e94560"></span>快指针 fast</span>
+<span><span class="dot" style="background:#ffd700"></span>交换</span>
+<span><span class="dot" style="background:#555"></span>零元素</span>
+</div>
+
+<script>
+const original=[0,1,0,3,12];
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const arr=[...original];
+  let slow=0;
+  steps.push({arr:[...arr],slow:-1,fast:-1,desc:'初始数组: ['+arr.join(', ')+']，slow = 0',type:'init'});
+  for(let fast=0;fast<arr.length;fast++){
+    if(arr[fast]!==0){
+      if(fast!==slow){
+        steps.push({arr:[...arr],slow,fast,desc:`fast=${fast}，nums[${fast}]=${arr[fast]} ≠ 0，且 fast ≠ slow，交换位置 ${slow} 和 ${fast}`,type:'swap',swapA:slow,swapB:fast});
+        [arr[slow],arr[fast]]=[arr[fast],arr[slow]];
+        steps.push({arr:[...arr],slow:slow+1,fast,desc:`交换完成 → [${arr.join(', ')}]，slow 右移至 ${slow+1}`,type:'afterSwap'});
+      }else{
+        steps.push({arr:[...arr],slow:slow+1,fast,desc:`fast=${fast}，nums[${fast}]=${arr[fast]} ≠ 0，但 fast = slow，无需交换，slow 右移至 ${slow+1}`,type:'noswap'});
+      }
+      slow++;
+    }else{
+      steps.push({arr:[...arr],slow,fast,desc:`fast=${fast}，nums[${fast}]=0，跳过（等待非零元素来替换）`,type:'skip'});
+    }
+  }
+  steps.push({arr:[...arr],slow:-1,fast:-1,desc:'遍历完成，所有零已移至末尾 → ['+arr.join(', ')+']',type:'end'});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=65,gap=12,n=original.length;
+const totalW=n*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2,cellH=70,baseY=170;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{arr:[...original],slow:-1,fast:-1,type:'init'}:steps[cur];
+  const arr=s.arr;
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a5a',border='#3a3a7a',fg='#ccc';
+    if(arr[i]===0){bg='#1a1a2e';border='#555';fg='#555';}
+    if(i===s.slow){bg='#153a25';border='#16c79a';fg='#16c79a';}
+    if(i===s.fast){bg='#3a1525';border='#e94560';fg='#e94560';}
+    if(s.type==='swap'||s.type==='afterSwap'){
+      if(i===s.swapA||i===s.swapB){border='#ffd700';fg='#ffd700';}
+    }
+    // cell
+    ctx.fillStyle=bg;ctx.strokeStyle=border;ctx.lineWidth=2;
+    roundRect(ctx,x,baseY,cellW,cellH,8);ctx.fill();ctx.stroke();
+    // value
+    ctx.fillStyle=fg;ctx.font='bold 22px sans-serif';ctx.textAlign='center';
+    ctx.fillText(arr[i]===0?'0':arr[i],x+cellW/2,baseY+cellH/2+8);
+    // index
+    ctx.fillStyle='#666';ctx.font='11px sans-serif';
+    ctx.fillText(i,x+cellW/2,baseY+cellH+18);
+    // swap animation line
+    if(s.type==='swap'&&s.swapA!==undefined){
+      if(i===s.swapA||i===s.swapB){
+        ctx.strokeStyle='#ffd700';ctx.lineWidth=3;ctx.setLineDash([4,3]);
+        ctx.strokeRect(x-3,baseY-3,cellW+6,cellH+6);
+        ctx.setLineDash([]);
+      }
+    }
+  }
+  // pointer arrows
+  if(s.slow>=0)drawArrow(s.slow,'#16c79a','slow');
+  if(s.fast>=0)drawArrow(s.fast,'#e94560','fast');
+  // original array for reference
+  ctx.fillStyle='#555';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText('原始: ['+original.join(', ')+']',W/2,H-20);
+}
+
+function drawArrow(i,color,label){
+  const x=offsetX+i*(cellW+gap)+cellW/2;
+  ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x,baseY-25);ctx.lineTo(x-7,baseY-12);ctx.lineTo(x+7,baseY-12);ctx.closePath();ctx.fill();
+  ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText(label,x,baseY-30);
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

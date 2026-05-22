@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>94 - 二叉树的中序遍历</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{color:#e94560;font-size:24px;margin-bottom:10px}
+#canvas{border:1px solid #333;border-radius:8px;background:#16213e}
+.controls{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap;justify-content:center}
+.controls button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:background .2s}
+.controls button:hover{background:#c73a52}
+.controls button:disabled{background:#555;cursor:not-allowed}
+#stepInfo{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;min-height:80px;margin-top:10px}
+#stepInfo h3{color:#16c79a;margin-bottom:6px}
+#stepInfo p{line-height:1.6}
+.highlight{color:#e94560;font-weight:bold}
+.result-tag{color:#16c79a;font-weight:bold}
+#stackPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#stackPanel h3{color:#16c79a;margin-bottom:6px}
+.stack-items{display:flex;gap:6px;flex-wrap:wrap;min-height:30px}
+.stack-item{background:#0f3460;padding:4px 10px;border-radius:4px;color:#16c79a;font-size:13px}
+.stack-item.active{background:#e94560;color:#fff}
+#resultPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#resultPanel h3{color:#16c79a;margin-bottom:6px}
+.result-list{display:flex;gap:6px;flex-wrap:wrap;min-height:30px}
+.result-val{background:#16c79a;color:#1a1a2e;padding:4px 10px;border-radius:4px;font-size:13px;font-weight:bold}
+</style>
+</head>
+<body>
+<h1>94 - 二叉树的中序遍历（左→根→右）</h1>
+<canvas id="canvas" width="780" height="400"></canvas>
+<div class="controls">
+<button id="btnReset">⏮ 重置</button>
+<button id="btnPrev">⏪ 步骤后退</button>
+<button id="btnPlay">▶ 播放</button>
+<button id="btnNext">步骤前进 ⏩</button>
+</div>
+<div id="stepInfo"><h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p></div>
+<div id="stackPanel"><h3>递归栈</h3><div class="stack-items" id="stackItems"></div></div>
+<div id="resultPanel"><h3>遍历结果</h3><div class="result-list" id="resultItems"></div></div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=780,H=400;
+const tree={
+  val:1,left:{val:2,left:{val:4,left:null,right:null},right:{val:5,left:{val:6,left:null,right:null},right:{val:7,left:null,right:null}}},right:{val:3,left:null,right:{val:8,left:null,right:null}}
+};
+const nodePos={};
+function assignPos(node,x,y,spread){
+  if(!node)return;
+  nodePos[node.val]={x,y};
+  assignPos(node.left,x-spread,y+60,spread/2);
+  assignPos(node.right,x+spread,y+60,spread/2);
+}
+assignPos(tree,390,50,160);
+function genSteps(node,steps,stack){
+  if(!node)return;
+  stack.push(node.val);
+  steps.push({type:'goLeft',val:node.val,stack:[...stack],desc:`访问节点 ${node.val}，向左子树深入`,result:null});
+  genSteps(node.left,steps,stack);
+  steps.push({type:'visit',val:node.val,stack:[...stack],desc:`访问节点 ${node.val}（左子树已处理），将 ${node.val} 加入遍历结果`,result:node.val});
+  genSteps(node.right,steps,stack);
+  steps.push({type:'goRight',val:node.val,stack:[...stack],desc:`节点 ${node.val} 的右子树处理完毕，弹出栈`,result:null});
+  stack.pop();
+}
+const steps=[];
+genSteps(tree,steps,[]);
+let curStep=-1,playing=false,timer=null,visited=new Set(),resultList=[];
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawEdges(tree);drawNodes(tree);
+}
+function drawEdges(node){
+  if(!node)return;
+  const p=nodePos[node.val];
+  if(node.left){const q=nodePos[node.left.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawEdges(node.left);}
+  if(node.right){const q=nodePos[node.right.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawEdges(node.right);}
+}
+function drawNodes(node){
+  if(!node)return;
+  const p=nodePos[node.val];const isCur=curStep>=0&&steps[curStep]&&steps[curStep].val===node.val;const isVisited=visited.has(node.val);
+  ctx.beginPath();ctx.arc(p.x,p.y,22,0,Math.PI*2);
+  if(isCur){ctx.fillStyle='#e94560';ctx.shadowColor='#e94560';ctx.shadowBlur=15;}
+  else if(isVisited){ctx.fillStyle='#16c79a';ctx.shadowColor='transparent';ctx.shadowBlur=0;}
+  else{ctx.fillStyle='#0f3460';ctx.shadowColor='transparent';ctx.shadowBlur=0;}
+  ctx.fill();ctx.shadowBlur=0;
+  ctx.strokeStyle=isCur?'#e94560':isVisited?'#16c79a':'#444';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(node.val,p.x,p.y);
+  drawNodes(node.left);drawNodes(node.right);
+}
+function applyStep(idx){
+  if(idx<0||idx>=steps.length)return;
+  const s=steps[idx];
+  if(s.type==='visit'){visited.add(s.val);if(s.result!==null)resultList.push(s.result);}
+}
+function unapplyStep(idx){
+  if(idx<0)return;
+  const s=steps[idx];
+  if(s.type==='visit'){visited.delete(s.val);if(s.result!==null)resultList.pop();}
+}
+function rebuildState(){
+  visited=new Set();resultList=[];
+  for(let i=0;i<=curStep&&i<steps.length;i++)applyStep(i);
+}
+function renderUI(){
+  draw();
+  const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  const infoEl=document.getElementById('stepInfo');
+  if(s){
+    const typeLabel={goLeft:'深入左子树',visit:'中序访问',goRight:'返回上层'};
+    infoEl.innerHTML=`<h3>步骤 ${curStep+1} / ${steps.length} — <span class="highlight">${typeLabel[s.type]||s.type}</span></h3><p>${s.desc}</p>`;
+  }else{infoEl.innerHTML=`<h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p>`;}
+  const si=document.getElementById('stackItems');
+  const stk=s?s.stack:[];
+  si.innerHTML=stk.map((v,i)=>`<span class="stack-item${i===stk.length-1?' active':''}">${v}</span>`).join('');
+  const ri=document.getElementById('resultItems');
+  ri.innerHTML=resultList.map(v=>`<span class="result-val">${v}</span>`).join('');
+}
+function stepForward(){
+  if(curStep<steps.length-1){curStep++;applyStep(curStep);renderUI();}
+  else{stopPlay();}
+}
+function stepBack(){
+  if(curStep>=0){curStep--;rebuildState();renderUI();}
+}
+function resetAnim(){
+  stopPlay();curStep=-1;visited=new Set();resultList=[];renderUI();
+}
+function startPlay(){if(playing)return;playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)stepForward();else stopPlay();},800);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+document.getElementById('btnPlay').onclick=()=>{if(playing)stopPlay();else startPlay();};
+document.getElementById('btnNext').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btnPrev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btnReset').onclick=resetAnim;
+renderUI();
+</script>
+</body>
+</html>

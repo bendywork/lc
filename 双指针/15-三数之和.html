@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>15 - 三数之和</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:800px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+#results{margin-top:10px;background:#16213e;border-radius:8px;padding:10px 16px;min-width:600px;border:1px solid #0f3460;font-size:.9em}
+#results .title{color:#16c79a;font-weight:bold;margin-bottom:4px}
+</style>
+</head>
+<body>
+<h1>15 - 三数之和</h1>
+<p id="desc">给定数组 nums，找出所有和为 0 的三元组 [a,b,c]。先将数组排序，固定第一个数，再用左右指针在剩余部分寻找两数之和等于第一个数的相反数。</p>
+<canvas id="cv" width="860" height="400"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button id="btnReset" onclick="reset()">⏮ 重置</button>
+<button id="btnPrev" onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button id="btnNext" onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="700" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#e94560"></span>固定指针 i</span>
+<span><span class="dot" style="background:#16c79a"></span>左指针 left</span>
+<span><span class="dot" style="background:#3498db"></span>右指针 right</span>
+<span><span class="dot" style="background:#ffd700"></span>找到的三元组</span>
+</div>
+<div id="results"><span class="title">找到的三元组：</span><span id="triplets">暂无</span></div>
+
+<script>
+const nums=[-1,0,1,2,-1,-4];
+nums.sort((a,b)=>a-b);
+const sorted=[...nums];
+const steps=[];
+const found=[];
+
+function buildSteps(){
+  steps.length=0;found.length=0;
+  const n=sorted.length;
+  steps.push({i:-1,l:-1,r:-1,sum:0,desc:'排序后数组: ['+sorted.join(', ')+']，开始遍历',type:'init'});
+  for(let i=0;i<n-2;i++){
+    if(i>0&&sorted[i]===sorted[i-1]){steps.push({i,l:-1,r:-1,sum:0,desc:`sorted[${i}]=${sorted[i]} 与 sorted[${i-1}]=${sorted[i-1]} 相同，跳过重复`,type:'skip'});continue;}
+    steps.push({i,l:-1,r:-1,sum:0,desc:`固定 i=${i}，nums[i]=${sorted[i]}，在 [${i+1}..${n-1}] 范围内双指针搜索`,type:'fix'});
+    let l=i+1,r=n-1;
+    while(l<r){
+      const sum=sorted[i]+sorted[l]+sorted[r];
+      if(sum===0){
+        const tri=[sorted[i],sorted[l],sorted[r]];
+        found.push(tri);
+        steps.push({i,l,r,sum,desc:`找到三元组: [${tri}]，和为 0 ✓`,type:'found'});
+        l++;while(l<r&&sorted[l]===sorted[l-1])l++;
+        r--;while(l<r&&sorted[r]===sorted[r+1])r--;
+      }else if(sum<0){
+        steps.push({i,l,r,sum,desc:`sum = ${sorted[i]}+${sorted[l]}+${sorted[r]} = ${sum} < 0，左指针右移`,type:'moveL'});
+        l++;
+      }else{
+        steps.push({i,l,r,sum,desc:`sum = ${sorted[i]}+${sorted[l]}+${sorted[r]} = ${sum} > 0，右指针左移`,type:'moveR'});
+        r--;
+      }
+    }
+  }
+  steps.push({i:-1,l:-1,r:-1,sum:0,desc:'遍历完成，共找到 '+found.length+' 个三元组',type:'end'});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=55,gap=6,totalW=sorted.length*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2,cellH=50,baseY=200;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{i:-1,l:-1,r:-1,type:'init'}:steps[cur];
+  // cells
+  for(let i=0;i<sorted.length;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a5a',border='#3a3a7a',fg='#ccc';
+    if(s.type==='found'&&[s.i,s.l,s.r].includes(i)){bg='#4a3a00';border='#ffd700';fg='#ffd700';}
+    if(s.type==='end'){
+      // highlight all found triplets
+    }
+    if(i===s.i){bg='#3a1525';border='#e94560';fg='#e94560';}
+    if(i===s.l){bg='#153a25';border='#16c79a';fg='#16c79a';}
+    if(i===s.r){bg='#15253a';border='#3498db';fg='#3498db';}
+    ctx.fillStyle=bg;ctx.strokeStyle=border;ctx.lineWidth=2;
+    roundRect(ctx,x,baseY,cellW,cellH,6);ctx.fill();ctx.stroke();
+    ctx.fillStyle=fg;ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+    ctx.fillText(sorted[i],x+cellW/2,baseY+cellH/2+6);
+    ctx.fillStyle='#666';ctx.font='11px sans-serif';
+    ctx.fillText(i,x+cellW/2,baseY+cellH+16);
+  }
+  // pointer arrows
+  if(s.i>=0)drawArrow(s.i,'#e94560','i');
+  if(s.l>=0)drawArrow(s.l,'#16c79a','L');
+  if(s.r>=0)drawArrow(s.r,'#3498db','R');
+  // sum display
+  if(s.i>=0&&s.l>=0&&s.r>=0){
+    const sum=sorted[s.i]+sorted[s.l]+sorted[s.r];
+    ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillStyle=sum===0?'#ffd700':sum<0?'#e94560':'#16c79a';
+    ctx.fillText(`sum = ${sorted[s.i]} + ${sorted[s.l]} + ${sorted[s.r]} = ${sum}`,W/2,baseY-30);
+    ctx.font='14px sans-serif';ctx.fillStyle='#888';
+    ctx.fillText(sum===0?'= 0 找到!':sum<0?'< 0 需要更大的数':'> 0 需要更小的数',W/2,baseY-10);
+  }
+  // triplet results
+  if(s.type==='found'){
+    const tri=[sorted[s.i],sorted[s.l],sorted[s.r]];
+    ctx.font='bold 16px sans-serif';ctx.fillStyle='#ffd700';ctx.textAlign='center';
+    ctx.fillText('✓ 三元组: ['+tri.join(', ')+']',W/2,baseY+cellH+50);
+  }
+  // current found count
+  const foundSoFar=s.type==='found'?found.filter((_,idx)=>{return steps.slice(0,cur+1).filter(st=>st.type==='found').length>0;}):[];
+  const foundCount=steps.slice(0,cur+1).filter(st=>st.type==='found').length;
+  ctx.fillStyle='#888';ctx.font='13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('已找到 '+foundCount+' 个三元组',15,25);
+}
+
+function drawArrow(i,color,label){
+  const x=offsetX+i*(cellW+gap)+cellW/2;
+  ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x,baseY-20);ctx.lineTo(x-6,baseY-10);ctx.lineTo(x+6,baseY-10);ctx.closePath();ctx.fill();
+  ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText(label,x,baseY-25);
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+  const foundCount=steps.slice(0,cur+1).filter(st=>st.type==='found').length;
+  const tris=[];
+  let fc=0;
+  for(let i=0;i<=cur&&i<steps.length;i++){if(steps[i].type==='found'){tris.push('['+found[fc].join(',')+']');fc++;}}
+  document.getElementById('triplets').textContent=tris.length?tris.join('  '):'暂无';
+}
+
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

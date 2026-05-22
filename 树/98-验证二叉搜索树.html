@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>98 - 验证二叉搜索树</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{color:#e94560;font-size:24px;margin-bottom:10px}
+#canvas{border:1px solid #333;border-radius:8px;background:#16213e}
+.controls{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap;justify-content:center}
+.controls button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:background .2s}
+.controls button:hover{background:#c73a52}
+.controls button:disabled{background:#555;cursor:not-allowed}
+#stepInfo{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;min-height:80px;margin-top:10px}
+#stepInfo h3{color:#16c79a;margin-bottom:6px}
+#stepInfo p{line-height:1.6}
+.highlight{color:#e94560;font-weight:bold}
+.valid-tag{color:#16c79a;font-weight:bold}
+.invalid-tag{color:#e94560;font-weight:bold}
+#checkPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#checkPanel h3{color:#16c79a;margin-bottom:6px}
+.check-items{display:flex;gap:6px;flex-wrap:wrap;min-height:30px}
+.check-item{padding:4px 10px;border-radius:4px;font-size:13px;font-weight:bold}
+.check-item.ok{background:#16c79a;color:#1a1a2e}
+.check-item.fail{background:#e94560;color:#fff}
+</style>
+</head>
+<body>
+<h1>98 - 验证二叉搜索树（中序遍历验证递增）</h1>
+<canvas id="canvas" width="780" height="400"></canvas>
+<div class="controls">
+<button id="btnReset">⏮ 重置</button>
+<button id="btnPrev">⏪ 步骤后退</button>
+<button id="btnPlay">▶ 播放</button>
+<button id="btnNext">步骤前进 ⏩</button>
+</div>
+<div id="stepInfo"><h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p></div>
+<div id="checkPanel"><h3>中序验证序列</h3><div class="check-items" id="checkItems"></div></div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=780,H=400;
+// Valid BST
+const tree={val:5,left:{val:3,left:{val:2,left:null,right:null},right:{val:4,left:null,right:null}},right:{val:7,left:{val:6,left:null,right:null},right:{val:8,left:null,right:null}}};
+const nodePos={};
+function assignPos(node,x,y,spread){
+  if(!node)return;
+  nodePos[node.val]={x,y,id:node.val};
+  assignPos(node.left,x-spread,y+60,spread/2);
+  assignPos(node.right,x+spread,y+60,spread/2);
+}
+assignPos(tree,390,50,160);
+const steps=[];
+let prevVal=-Infinity;
+function genSteps(node){
+  if(!node)return;
+  steps.push({type:'goLeft',val:node.val,desc:`到达节点 ${node.val}，先检查左子树`});
+  genSteps(node.left);
+  steps.push({type:'check',val:node.val,prevVal:prevVal,desc:`中序访问节点 ${node.val}，检查 ${prevVal} < ${node.val} ？`});
+  prevVal=node.val;
+  genSteps(node.right);
+  steps.push({type:'goRight',val:node.val,desc:`节点 ${node.val} 右子树处理完毕`});
+}
+genSteps(tree);
+// Add final result
+steps.push({type:'result',val:null,desc:`所有节点均满足递增关系，该树是有效的二叉搜索树 ✓`});
+let curStep=-1,playing=false,timer=null,visited=new Set(),checkedList=[];
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawEdges(tree);drawNodes(tree);
+}
+function drawEdges(node){
+  if(!node)return;
+  const p=nodePos[node.val];
+  if(node.left){const q=nodePos[node.left.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawEdges(node.left);}
+  if(node.right){const q=nodePos[node.right.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawEdges(node.right);}
+}
+function drawNodes(node){
+  if(!node)return;
+  const p=nodePos[node.val];
+  const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  const isCur=s&&s.val===node.val;
+  const isChecked=visited.has(node.val);
+  ctx.beginPath();ctx.arc(p.x,p.y,22,0,Math.PI*2);
+  if(isCur){ctx.fillStyle='#e94560';ctx.shadowColor='#e94560';ctx.shadowBlur=15;}
+  else if(isChecked){ctx.fillStyle='#16c79a';ctx.shadowColor='transparent';ctx.shadowBlur=0;}
+  else{ctx.fillStyle='#0f3460';ctx.shadowColor='transparent';ctx.shadowBlur=0;}
+  ctx.fill();ctx.shadowBlur=0;
+  ctx.strokeStyle=isCur?'#e94560':isChecked?'#16c79a':'#444';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='bold 15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(node.val,p.x,p.y);
+  drawNodes(node.left);drawNodes(node.right);
+}
+function rebuildState(){
+  visited=new Set();checkedList=[];
+  for(let i=0;i<=curStep&&i<steps.length;i++){
+    const s=steps[i];
+    if(s.type==='check'){visited.add(s.val);checkedList.push({val:s.val,ok:s.prevVal<s.val,prev:s.prevVal});}
+  }
+}
+function renderUI(){
+  draw();
+  const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  const infoEl=document.getElementById('stepInfo');
+  if(s){
+    let tag='';if(s.type==='check')tag=s.prevVal<s.val?'<span class="valid-tag">✓ 有效</span>':'<span class="invalid-tag">✗ 无效</span>';
+    const typeLabel={goLeft:'深入左子树',check:'中序验证',goRight:'返回上层',result:'最终结论'};
+    infoEl.innerHTML=`<h3>步骤 ${curStep+1} / ${steps.length} — <span class="highlight">${typeLabel[s.type]||s.type}</span>${tag}</h3><p>${s.desc}</p>`;
+  }else{infoEl.innerHTML=`<h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p>`;}
+  const ci=document.getElementById('checkItems');
+  ci.innerHTML=checkedList.map(c=>`<span class="check-item ${c.ok?'ok':'fail'}">${c.prev} &lt; ${c.val} ${c.ok?'✓':'✗'}</span>`).join('');
+}
+function stepForward(){
+  if(curStep<steps.length-1){curStep++;rebuildState();renderUI();}
+  else stopPlay();
+}
+function stepBack(){if(curStep>=0){curStep--;rebuildState();renderUI();}}
+function resetAnim(){stopPlay();curStep=-1;rebuildState();renderUI();}
+function startPlay(){if(playing)return;playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)stepForward();else stopPlay();},800);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+document.getElementById('btnPlay').onclick=()=>{if(playing)stopPlay();else startPlay();};
+document.getElementById('btnNext').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btnPrev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btnReset').onclick=resetAnim;
+renderUI();
+</script>
+</body>
+</html>

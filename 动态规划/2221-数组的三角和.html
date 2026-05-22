@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2221 - 数组的三角和</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:1.6rem;margin-bottom:8px}
+.subtitle{color:#16c79a;font-size:.95rem;margin-bottom:16px}
+#canvas-wrap{background:#16213e;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+canvas{display:block}
+#desc-panel{background:#16213e;border-radius:10px;padding:14px 20px;width:800px;margin-bottom:12px;min-height:70px;border-left:4px solid #e94560}
+#desc-panel .step-num{color:#16c79a;font-weight:bold;font-size:1.1rem}
+#desc-panel .formula{color:#e94560;font-family:'Courier New',monospace;font-size:1rem;margin-top:6px}
+#desc-panel .explain{color:#b0b0b0;margin-top:4px;font-size:.9rem}
+#controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+button{background:#0f3460;color:#e0e0e0;border:2px solid #e94560;border-radius:8px;padding:8px 18px;font-size:1rem;cursor:pointer;transition:all .2s}
+button:hover{background:#e94560;color:#fff}
+button:active{transform:scale(.95)}
+#speed-label{color:#16c79a;font-size:.9rem}
+#speed{width:80px;accent-color:#e94560}
+.legend{display:flex;gap:16px;margin-top:10px;font-size:.85rem;flex-wrap:wrap;justify-content:center}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend .dot{width:14px;height:14px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>LeetCode 2221 - 数组的三角和</h1>
+<p class="subtitle">逐层缩减 · new[i] = (nums[i] + nums[i+1]) % 10</p>
+<div id="canvas-wrap"><canvas id="cv" width="800" height="520"></canvas></div>
+<div id="desc-panel">
+  <div class="step-num">步骤 0 / 0</div>
+  <div class="formula"></div>
+  <div class="explain">点击 ▶ 或步骤按钮开始动画</div>
+</div>
+<div id="controls">
+  <button id="btn-reset">⏮ 重置</button>
+  <button id="btn-prev">◀ 上一步</button>
+  <button id="btn-play">▶ 播放</button>
+  <button id="btn-next">▶ 下一步</button>
+  <span id="speed-label">速度</span>
+  <input type="range" id="speed" min="1" max="10" value="4">
+</div>
+<div class="legend">
+  <span><span class="dot" style="background:#16c79a"></span>当前计算</span>
+  <span><span class="dot" style="background:#e94560"></span>参与运算的元素</span>
+  <span><span class="dot" style="background:#533483"></span>已完成层</span>
+  <span><span class="dot" style="background:#0f3460"></span>待计算</span>
+</div>
+<script>
+const nums=[1,2,3,4,5];
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=800,H=520;
+let steps=[],curStep=-1,playing=false,playTimer=null;
+const speedEl=document.getElementById('speed');
+
+function buildSteps(){
+  steps=[];
+  const layers=[nums.slice()];
+  // compute all layers
+  let cur=nums.slice();
+  while(cur.length>1){
+    const next=[];
+    for(let i=0;i<cur.length-1;i++){
+      next.push((cur[i]+cur[i+1])%10);
+    }
+    layers.push(next);
+    cur=next;
+  }
+  // generate steps - one step per element per layer
+  const state=Array.from({length:layers.length},(_,l)=>new Array(layers[l].length).fill(null));
+  // first layer always visible
+  for(let j=0;j<layers[0].length;j++){
+    state[0][j]=layers[0][j];
+  }
+  steps.push({layer:0,li:-1,lj:-1,layers:layers.map(r=>[...r]),state:state.map(r=>[...r]),desc:'初始数组',formula:`原始数组: [${nums.join(', ')}]`});
+
+  for(let l=1;l<layers.length;l++){
+    for(let j=0;j<layers[l].length;j++){
+      const s=state.map(r=>r.map(v=>v));
+      // fill up to current position
+      for(let jj=0;jj<=j;jj++){
+        s[l][jj]=layers[l][jj];
+      }
+      const a=layers[l-1][j],b=layers[l-1][j+1];
+      steps.push({layer:l,li:j,lj:j,layers:layers.map(r=>[...r]),state:s.map(r=>[...r]),desc:`第${l}层：计算位置${j}`,formula:`(${a} + ${b}) % 10 = ${a+b} % 10 = ${(a+b)%10}`});
+    }
+  }
+  steps.push({layer:layers.length-1,li:0,lj:0,layers:layers.map(r=>[...r]),state:layers.map(r=>[...r]),desc:'三角和计算完毕',formula:`最终结果 = ${layers[layers.length-1][0]}`});
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=curStep>=0?steps[curStep]:null;
+  const layers=s?s.layers:[nums.slice()];
+  const state=s?s.state:layers.map(r=>r.map(()=>null));
+  const cL=s?s.layer:0,cI=s?s.li:-1;
+
+  const cellW=52,cellH=42,gapX=8,gapY=10;
+  const totalRows=layers.length;
+  const baseX=W/2,baseY=25;
+
+  ctx.fillStyle='#e0e0e0';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('三角和 · 层层缩减',W/2,18);
+
+  for(let l=0;l<totalRows;l++){
+    const rowLen=layers[l].length;
+    const totalW=rowLen*cellW+(rowLen-1)*gapX;
+    const startX=baseX-totalW/2;
+    const y=baseY+30+l*(cellH+gapY);
+    for(let j=0;j<rowLen;j++){
+      const x=startX+j*(cellW+gapX);
+      let bg='#0f3460';
+      if(state[l][j]!==null)bg='#533483';
+      if(l===cL&&j===cI)bg='#16c79a';
+      // highlight parents in previous layer
+      if(s&&l===cL-1&&l>=0&&(j===cI||j===cI+1))bg='#e94560';
+
+      ctx.fillStyle=bg;
+      ctx.beginPath();ctx.roundRect(x,y,cellW,cellH,5);ctx.fill();
+      ctx.strokeStyle=l===cL&&j===cI?'#16c79a':'#333';
+      ctx.lineWidth=l===cL&&j===cI?2.5:1;ctx.stroke();
+
+      ctx.fillStyle='#e0e0e0';ctx.font='bold 15px sans-serif';ctx.textAlign='center';
+      if(state[l][j]!==null)ctx.fillText(state[l][j],x+cellW/2,y+cellH/2+6);
+    }
+  }
+
+  // Draw connecting lines from parents to current
+  if(s&&cL>=1&&cI>=0&&cI<layers[cL-1].length-1){
+    const parentRowLen=layers[cL-1].length;
+    const pTotalW=parentRowLen*cellW+(parentRowLen-1)*gapX;
+    const pStartX=baseX-pTotalW/2;
+
+    const childRowLen=layers[cL].length;
+    const cTotalW=childRowLen*cellW+(childRowLen-1)*gapX;
+    const cStartX=baseX-cTotalW/2;
+
+    const py=baseY+30+(cL-1)*(cellH+gapY)+cellH;
+    const cy=baseY+30+cL*(cellH+gapY);
+
+    const px1=pStartX+cI*(cellW+gapX)+cellW/2;
+    const px2=pStartX+(cI+1)*(cellW+gapX)+cellW/2;
+    const cx=cStartX+cI*(cellW+gapX)+cellW/2;
+
+    ctx.strokeStyle='#e94560';ctx.lineWidth=2;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(px1,py);ctx.lineTo(cx,cy);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(px2,py);ctx.lineTo(cx,cy);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // layer labels
+  for(let l=0;l<totalRows;l++){
+    const rowLen=layers[l].length;
+    const totalW2=rowLen*cellW+(rowLen-1)*gapX;
+    const startX2=baseX+totalW2/2+20;
+    const y2=baseY+30+l*(cellH+gapY)+cellH/2;
+    ctx.fillStyle=l===cL?'#16c79a':'#888';ctx.font='11px sans-serif';ctx.textAlign='left';
+    ctx.fillText(`L${l}`,startX2,y2+4);
+  }
+}
+
+function updateDesc(){
+  const panel=document.getElementById('desc-panel');
+  if(curStep<0){panel.innerHTML=`<div class="step-num">步骤 0 / ${steps.length}</div><div class="explain">点击 ▶ 或步骤按钮开始动画</div>`;return;}
+  const s=steps[curStep];
+  panel.innerHTML=`<div class="step-num">步骤 ${curStep+1} / ${steps.length}</div><div class="formula">${s.formula}</div><div class="explain">${s.desc}</div>`;
+}
+
+function stepForward(){if(curStep<steps.length-1){curStep++;draw();updateDesc();}else stopPlay();}
+function stepBack(){if(curStep>0){curStep--;draw();updateDesc();}else{curStep=-1;draw();updateDesc();}}
+function startPlay(){if(playing)return;if(curStep>=steps.length-1)curStep=-1;playing=true;document.getElementById('btn-play').textContent='⏸ 暂停';tick();}
+function tick(){if(!playing)return;stepForward();if(curStep>=steps.length-1){stopPlay();return;}playTimer=setTimeout(tick,1000/speedEl.value);}
+function stopPlay(){playing=false;clearTimeout(playTimer);document.getElementById('btn-play').textContent='▶ 播放';}
+function reset(){stopPlay();curStep=-1;draw();updateDesc();}
+
+document.getElementById('btn-play').onclick=()=>playing?stopPlay():startPlay();
+document.getElementById('btn-next').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btn-prev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btn-reset').onclick=reset;
+
+buildSteps();draw();updateDesc();
+</script>
+</body>
+</html>

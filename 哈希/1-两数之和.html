@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1 - 两数之和</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.header{width:100%;background:linear-gradient(135deg,#16213e,#0f3460);padding:24px 0;text-align:center;border-bottom:2px solid #e94560}
+.header h1{font-size:28px;color:#e94560;margin-bottom:6px}
+.header p{color:#aaa;font-size:14px}
+.example{background:#16213e;border-radius:12px;padding:18px 28px;margin:20px auto;max-width:800px;border:1px solid #333;width:90%}
+.example h3{color:#16c79a;margin-bottom:8px;font-size:16px}
+.example pre{color:#ccc;font-size:14px;line-height:1.6;white-space:pre-wrap}
+.canvas-wrap{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:12px auto;max-width:1100px;width:95%}
+.canvas-box{background:#16213e;border-radius:12px;border:1px solid #333;overflow:hidden;flex:1;min-width:320px;max-width:520px}
+.canvas-box h3{text-align:center;padding:10px;color:#16c79a;font-size:15px;border-bottom:1px solid #333}
+canvas{display:block;margin:0 auto}
+.desc-panel{background:#16213e;border-radius:12px;padding:16px 24px;margin:12px auto;max-width:1100px;width:95%;border:1px solid #333;min-height:60px}
+.desc-panel .step-counter{color:#e94560;font-size:13px;margin-bottom:6px}
+.desc-panel .step-text{color:#eee;font-size:15px;line-height:1.6}
+.controls{display:flex;gap:12px;justify-content:center;margin:16px auto;flex-wrap:wrap}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:8px;padding:10px 22px;font-size:15px;cursor:pointer;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+.controls button:active{transform:scale(.95)}
+.controls button:disabled{opacity:.4;cursor:not-allowed}
+.spacer{height:30px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>LeetCode 1 - 两数之和</h1>
+  <p>Two Sum | 哈希表法</p>
+</div>
+<div class="example">
+  <h3>示例</h3>
+  <pre>输入：nums = [2,7,11,15], target = 9
+输出：[0,1]
+解释：nums[0] + nums[1] = 2 + 7 = 9，返回 [0,1]</pre>
+</div>
+<div class="canvas-wrap">
+  <div class="canvas-box">
+    <h3>数组</h3>
+    <canvas id="arrayCanvas" width="480" height="180"></canvas>
+  </div>
+  <div class="canvas-box">
+    <h3>哈希表 (值 → 索引)</h3>
+    <canvas id="hashCanvas" width="480" height="280"></canvas>
+  </div>
+</div>
+<div class="desc-panel">
+  <div class="step-counter" id="stepCounter">步骤 0 / 0</div>
+  <div class="step-text" id="stepText">点击「播放」或「步骤前进」开始动画</div>
+</div>
+<div class="controls">
+  <button id="btnReset" onclick="reset()">⏮ 重置</button>
+  <button id="btnPrev" onclick="prevStep()">◀ 步骤后退</button>
+  <button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+  <button id="btnNext" onclick="nextStep()">步骤前进 ▶</button>
+</div>
+<div class="spacer"></div>
+
+<script>
+const nums=[2,7,11,15],target=9;
+const arrayCtx=document.getElementById('arrayCanvas').getContext('2d');
+const hashCtx=document.getElementById('hashCanvas').getContext('2d');
+const AW=480,AH=180,HW=480,HH=280;
+const COLORS={bg:'#1a1a2e',card:'#16213e',accent:'#e94560',highlight:'#16c79a',text:'#eee',dim:'#555',found:'#ffdd57'};
+
+// --- Step generation ---
+function genSteps(){
+  const steps=[];
+  const hm={};
+  steps.push({desc:'初始状态：遍历数组，对每个元素查找 target - nums[i] 是否已在哈希表中',hm:{},curIdx:-1,found:null});
+  for(let i=0;i<nums.length;i++){
+    const complement=target-nums[i];
+    steps.push({desc:`遍历到 nums[${i}] = ${nums[i]}，计算补数 complement = ${target} - ${nums[i]} = ${complement}`,hm:{...hm},curIdx:i,compKey:complement,found:null});
+    if(hm.hasOwnProperty(complement)){
+      const j=hm[complement];
+      steps.push({desc:`在哈希表中找到补数 ${complement}（索引 ${j}），返回 [${j}, ${i}]`,hm:{...hm},curIdx:i,compKey:complement,found:[j,i]});
+      return steps;
+    }
+    hm[nums[i]]=i;
+    steps.push({desc:`补数 ${complement} 不在哈希表中，将 {${nums[i]}: ${i}} 存入哈希表`,hm:{...hm},curIdx:i,compKey:complement,found:null,justAdded:nums[i]});
+  }
+  steps.push({desc:'遍历结束，未找到满足条件的两个数',hm:{...hm},curIdx:-1,found:null});
+  return steps;
+}
+
+let steps=genSteps(),curStep=0,playing=false,timer=null;
+
+// --- Drawing ---
+function drawArray(step){
+  const ctx=arrayCtx;
+  ctx.clearRect(0,0,AW,AH);
+  const n=nums.length,cellW=80,gap=12,totalW=n*cellW+(n-1)*gap;
+  const sx=(AW-totalW)/2,sy=30,ch=80;
+  for(let i=0;i<n;i++){
+    const x=sx+i*(cellW+gap);
+    const isCur=step.curIdx===i;
+    const isFound=step.found&&(step.found[0]===i||step.found[1]===i);
+    ctx.fillStyle=isFound?COLORS.found:isCur?COLORS.accent:COLORS.card;
+    ctx.strokeStyle=isFound?'#ffdd57':isCur?COLORS.accent:COLORS.dim;
+    ctx.lineWidth=isCur||isFound?3:1;
+    roundRect(ctx,x,sy,cellW,ch,8,true,true);
+    ctx.fillStyle=isFound?'#1a1a2e':COLORS.text;
+    ctx.font='bold 24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(nums[i],x+cellW/2,sy+ch/2);
+    ctx.fillStyle=COLORS.dim;ctx.font='13px sans-serif';
+    ctx.fillText(`[${i}]`,x+cellW/2,sy+ch+16);
+  }
+  if(step.found){
+    ctx.fillStyle=COLORS.found;ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`nums[${step.found[0]}] + nums[${step.found[1]}] = ${target} ✦`,AW/2,AH-8);
+  }
+}
+
+function drawHash(step){
+  const ctx=hashCtx;
+  ctx.clearRect(0,0,HW,HH);
+  const entries=Object.entries(step.hm);
+  if(entries.length===0){
+    ctx.fillStyle=COLORS.dim;ctx.font='15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('（空）',HW/2,HH/2);
+    return;
+  }
+  const rowH=40,pad=30,maxRows=Math.floor((HH-pad)/rowH);
+  // table header
+  ctx.fillStyle=COLORS.accent;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  const col1=HW/2-80,col2=HW/2+80;
+  ctx.fillText('Key（值）',col1,pad);
+  ctx.fillText('Value（索引）',col2,pad);
+  ctx.strokeStyle=COLORS.dim;ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(40,pad+10);ctx.lineTo(HW-40,pad+10);ctx.stroke();
+  entries.slice(0,maxRows-1).forEach(([k,v],idx)=>{
+    const y=pad+30+idx*rowH;
+    const isComp=step.compKey!=null&&Number(k)===step.compKey;
+    const isJustAdded=step.justAdded!=null&&Number(k)===step.justAdded;
+    if(isComp){
+      ctx.fillStyle='rgba(233,69,96,0.15)';
+      ctx.fillRect(40,y-14,HW-80,rowH-4);
+    }
+    if(isJustAdded){
+      ctx.fillStyle='rgba(22,199,154,0.15)';
+      ctx.fillRect(40,y-14,HW-80,rowH-4);
+    }
+    ctx.fillStyle=isComp?COLORS.accent:isJustAdded?COLORS.highlight:COLORS.text;
+    ctx.font='16px sans-serif';ctx.textAlign='center';
+    ctx.fillText(k,col1,y);
+    ctx.fillText(v,col2,y);
+  });
+  if(step.compKey!=null&&!step.hm.hasOwnProperty(step.compKey)&&!step.found){
+    const y=pad+30+entries.length*rowH;
+    ctx.fillStyle=COLORS.dim;ctx.font='italic 14px sans-serif';
+    ctx.fillText(`${step.compKey} → 不存在`,HW/2,y);
+  }
+}
+
+function roundRect(ctx,x,y,w,h,r,fill,stroke){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+  if(fill)ctx.fill();if(stroke)ctx.stroke();
+}
+
+function render(){
+  const step=steps[curStep];
+  drawArray(step);drawHash(step);
+  document.getElementById('stepCounter').textContent=`步骤 ${curStep} / ${steps.length-1}`;
+  document.getElementById('stepText').textContent=step.desc;
+}
+
+// --- Controls ---
+function reset(){stopPlay();curStep=0;render();}
+function nextStep(){if(curStep<steps.length-1){curStep++;render();}else stopPlay();}
+function prevStep(){if(curStep>0){curStep--;render();}}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)nextStep();else stopPlay();},1200);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>3 - 无重复字符的最长子串</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:800px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>3 - 无重复字符的最长子串</h1>
+<p id="desc">给定字符串 s，找出不含重复字符的最长子串的长度。滑动窗口：右指针扩展窗口，遇到重复时左指针收缩直到无重复。</p>
+<canvas id="cv" width="820" height="440"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="800" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#e94560"></span>左指针</span>
+<span><span class="dot" style="background:#16c79a"></span>右指针</span>
+<span><span class="dot" style="background:#ffd700"></span>最长子串</span>
+<span><span class="dot" style="background:#5344a8"></span>当前窗口</span>
+</div>
+
+<script>
+const str='abcabcbb';
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const map=new Map();
+  let left=0,maxLen=0,maxL=0,maxR=0;
+  steps.push({left:0,right:-1,map:new Map(),maxLen,maxL,maxR,desc:'初始化：left=0，空窗口',type:'init'});
+  for(let right=0;right<str.length;right++){
+    const ch=str[right];
+    if(map.has(ch)&&map.get(ch)>=left){
+      const oldLeft=left;
+      left=map.get(ch)+1;
+      const newMap=new Map(map);
+      newMap.set(ch,right);
+      steps.push({left,right,map:new Map(newMap),maxLen,maxL,maxR,desc:`right=${right}，字符 '${ch}' 已在窗口内(位置${map.get(ch)})，left 从 ${oldLeft} 移至 ${left}（去重）`,type:'shrink'});
+      map.set(ch,right);
+    }else{
+      const newMap=new Map(map);
+      newMap.set(ch,right);
+      steps.push({left,right,map:new Map(newMap),maxLen,maxL,maxR,desc:`right=${right}，字符 '${ch}' 不在窗口内，窗口扩展至 [${left},${right}]`,type:'expand'});
+      map.set(ch,right);
+    }
+    if(right-left+1>maxLen){
+      maxLen=right-left+1;maxL=left;maxR=right;
+      steps.push({left,right,map:new Map(map),maxLen,maxL,maxR,desc:`当前窗口长度 = ${right-left+1}，更新最大长度 = ${maxLen}（子串 "${str.substring(maxL,maxR+1)}"）`,type:'update'});
+    }
+  }
+  steps.push({left:str.length-1,right:str.length-1,map:new Map(map),maxLen,maxL,maxR,desc:`遍历完成，最长无重复子串 "${str.substring(maxL,maxR+1)}"，长度 = ${maxLen}`,type:'end'});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=55,gap=8,n=str.length;
+const totalW=n*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2,cellH=65,baseY=130;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{left:0,right:-1,maxLen:0,maxL:0,maxR:0,map:new Map(),type:'init'}:steps[cur];
+  // current window highlight
+  if(s.right>=0){
+    const x1=offsetX+s.left*(cellW+gap)-4,x2=offsetX+s.right*(cellW+gap)+cellW+4;
+    ctx.fillStyle='rgba(83,68,168,0.15)';
+    ctx.fillRect(x1,baseY-10,x2-x1,cellH+20);
+    ctx.strokeStyle='#5344a8';ctx.lineWidth=2;
+    ctx.strokeRect(x1,baseY-10,x2-x1,cellH+20);
+    // window label
+    ctx.fillStyle='#5344a8';ctx.font='11px sans-serif';ctx.textAlign='center';
+    ctx.fillText('窗口 ['+s.left+','+s.right+']',x1+(x2-x1)/2,baseY-18);
+  }
+  // longest substring highlight
+  if(s.maxLen>0){
+    const x1=offsetX+s.maxL*(cellW+gap)-2,x2=offsetX+s.maxR*(cellW+gap)+cellW+2;
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=3;ctx.setLineDash([5,3]);
+    ctx.strokeRect(x1,baseY-7,x2-x1,cellH+14);
+    ctx.setLineDash([]);
+  }
+  // character cells
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a5a',border='#3a3a7a',fg='#ccc';
+    const inWindow=s.right>=0&&i>=s.left&&i<=s.right;
+    if(inWindow){bg='#2a2a6a';border='#5344a8';fg='#fff';}
+    if(i===s.left){border='#e94560';fg='#e94560';}
+    if(i===s.right){border='#16c79a';fg='#16c79a';}
+    // duplicate highlight
+    if(s.type==='shrink'&&i===s.right){bg='#3a2020';border='#e94560';fg='#e94560';}
+    ctx.fillStyle=bg;ctx.strokeStyle=border;ctx.lineWidth=2;
+    roundRect(ctx,x,baseY,cellW,cellH,8);ctx.fill();ctx.stroke();
+    ctx.fillStyle=fg;ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+    ctx.fillText(str[i],x+cellW/2,baseY+cellH/2+7);
+    ctx.fillStyle='#555';ctx.font='11px sans-serif';
+    ctx.fillText(i,x+cellW/2,baseY+cellH+16);
+  }
+  // pointer arrows
+  if(s.right>=0){
+    drawArrow(s.left,'#e94560','L');
+    drawArrow(s.right,'#16c79a','R');
+  }
+  // character frequency map
+  drawFreqMap(s);
+  // max length display
+  ctx.fillStyle='#fff';ctx.font='bold 15px sans-serif';ctx.textAlign='center';
+  ctx.fillText('当前窗口长度: '+(s.right>=0?s.right-s.left+1:0)+'  |  最大长度: '+s.maxLen+(s.maxLen>0?' ("'+str.substring(s.maxL,s.maxR+1)+'")':''),W/2,H-20);
+}
+
+function drawFreqMap(s){
+  const mapStartX=50,mapStartY=260;
+  ctx.fillStyle='#888';ctx.font='13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('字符频率表（窗口内）:',mapStartX,mapStartY);
+  let px=mapStartX,py=mapStartY+20;
+  const entries=[...s.map.entries()].filter(([k,v])=>v>=s.left&&v<=Math.max(s.right,0));
+  for(const [ch,pos]of entries){
+    ctx.fillStyle='#16213e';ctx.strokeStyle='#3a3a7a';ctx.lineWidth=1;
+    roundRect(ctx,px,py,80,30,4);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#16c79a';ctx.font='13px sans-serif';ctx.textAlign='left';
+    ctx.fillText(`'${ch}' → ${pos}`,px+8,py+20);
+    px+=88;
+    if(px>W-100){px=mapStartX;py+=36;}
+  }
+}
+
+function drawArrow(i,color,label){
+  const x=offsetX+i*(cellW+gap)+cellW/2;
+  ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x,baseY-30);ctx.lineTo(x-6,baseY-18);ctx.lineTo(x+6,baseY-18);ctx.closePath();ctx.fill();
+  ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText(label,x,baseY-35);
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

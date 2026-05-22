@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>33-搜索旋转排序数组</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:340px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.array-bar{display:flex;gap:3px;margin:16px 0;justify-content:center;align-items:flex-end}
+.arr-cell{width:44px;border-radius:4px 4px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:4px 2px;transition:all .3s;font-size:14px;font-weight:bold;font-family:monospace;position:relative}
+.arr-cell .val{color:#fff}
+.arr-cell .idx{font-size:9px;color:#aaa;position:absolute;bottom:-16px}
+.arr-cell.in-range{background:#16c79a44;border:2px solid #16c79a33}
+.arr-cell.out-range{background:#16213e;border:2px solid #333}
+.arr-cell.left-ptr{border-bottom:3px solid #16c79a}
+.arr-cell.right-ptr{border-bottom:3px solid #e94560}
+.arr-cell.mid-ptr{border-bottom:3px solid #ffd700;background:#ffd70022}
+.arr-cell.found{background:#16c79a88;border:2px solid #16c79a}
+.ptr-labels{display:flex;gap:3px;margin:0 0 8px;justify-content:center}
+.ptr-label{width:44px;text-align:center;font-size:11px;font-weight:bold}
+.ptr-label.left{color:#16c79a}.ptr-label.right{color:#e94560}.ptr-label.mid{color:#ffd700}
+.search-info{margin-top:20px;background:#0f3460;border-radius:8px;padding:10px;font-size:13px;line-height:1.8}
+.search-info .key{color:#16c79a;font-weight:bold}
+.search-info .highlight{color:#ffd700}
+.result-box{margin-top:12px;padding:12px;border-radius:8px;font-size:16px;font-weight:bold;text-align:center;display:none}
+.result-box.found{background:#16c79a22;border:1px solid #16c79a;color:#16c79a}
+.result-box.not-found{background:#e9456022;border:1px solid #e94560;color:#e94560}
+</style>
+</head>
+<body>
+<h1>33 - 搜索旋转排序数组</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">数组可视化</div>
+<div style="color:#aaa;font-size:13px">nums = [4,5,6,7,0,1,2]，target = 0</div>
+<div class="ptr-labels" id="ptrLabels"></div>
+<div class="array-bar" id="arrayBar"></div>
+<div style="height:20px"></div>
+<div class="search-info" id="searchInfo">等待开始...</div>
+<div class="result-box" id="resultBox"></div>
+</div>
+<div class="panel">
+<div class="panel-title">搜索过程</div>
+<canvas id="recCanvas" width="500" height="400"></canvas>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const NUMS=[4,5,6,7,0,1,2];
+const TARGET=0;
+const canvas=document.getElementById('recCanvas');
+const ctx=canvas.getContext('2d');
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function buildArray(left,right,mid,foundIdx){
+  const bar=document.getElementById('arrayBar');bar.innerHTML='';
+  const labels=document.getElementById('ptrLabels');labels.innerHTML='';
+  NUMS.forEach((v,i)=>{
+    const inRange=i>=left&&i<=right;
+    const isLeft=i===left;const isRight=i===right;const isMid=i===mid;const isFound=i===foundIdx;
+    let cls=inRange?'in-range':'out-range';
+    if(isFound)cls='found';else if(isMid)cls='mid-ptr';
+    else if(isLeft)cls='left-ptr';else if(isRight)cls='right-ptr';
+    const h=30+v*8;
+    bar.innerHTML+=`<div class="arr-cell ${cls}" style="height:${h}px"><span class="val">${v}</span><span class="idx">${i}</span></div>`;
+    let lbl='';if(isLeft)lbl='L';if(isRight)lbl+=(lbl?'/':'')+'R';if(isMid)lbl+=(lbl?'/':'')+'M';
+    const lc=lbl.includes('M')?'mid':lbl.includes('L')?'left':lbl.includes('R')?'right':'';
+    labels.innerHTML+=`<div class="ptr-label ${lc}">${lbl||' '}</div>`;
+  });
+}
+
+function generateSteps(){
+  steps=[];
+  let left=0,right=NUMS.length-1;
+  steps.push({type:'start',left,right,mid:-1,foundIdx:-1,
+    desc:`开始搜索，target=${TARGET}，范围 [${left}, ${right}]`});
+  while(left<=right){
+    const mid=Math.floor((left+right)/2);
+    if(NUMS[mid]===TARGET){
+      steps.push({type:'found',left,right,mid,foundIdx:mid,
+        desc:`nums[${mid}]=${NUMS[mid]} === target=${TARGET}，找到！索引=${mid}`});
+      break;
+    }
+    steps.push({type:'compare',left,right,mid,foundIdx:-1,
+      desc:`mid=${mid}，nums[mid]=${NUMS[mid]}，判断哪半边有序`});
+    if(NUMS[left]<=NUMS[mid]){
+      // left half sorted
+      steps.push({type:'left_sorted',left,right,mid,foundIdx:-1,
+        desc:`左半有序 [${left}..${mid}]：nums[${left}]=${NUMS[left]} <= nums[${mid}]=${NUMS[mid]}`});
+      if(TARGET>=NUMS[left]&&TARGET<NUMS[mid]){
+        steps.push({type:'go_left',left,right,mid,foundIdx:-1,newLeft:left,newRight:mid-1,
+          desc:`target=${TARGET} 在左半范围内 [${NUMS[left]}, ${NUMS[mid]})，搜索左半 → right=${mid-1}`});
+        right=mid-1;
+      }else{
+        steps.push({type:'go_right',left,right,mid,foundIdx:-1,newLeft:mid+1,newRight:right,
+          desc:`target=${TARGET} 不在左半，搜索右半 → left=${mid+1}`});
+        left=mid+1;
+      }
+    }else{
+      // right half sorted
+      steps.push({type:'right_sorted',left,right,mid,foundIdx:-1,
+        desc:`右半有序 [${mid}..${right}]：nums[${mid}]=${NUMS[mid]} <= nums[${right}]=${NUMS[right]}`});
+      if(TARGET>NUMS[mid]&&TARGET<=NUMS[right]){
+        steps.push({type:'go_right',left,right,mid,foundIdx:-1,newLeft:mid+1,newRight:right,
+          desc:`target=${TARGET} 在右半范围内 (${NUMS[mid]}, ${NUMS[right]}]，搜索右半 → left=${mid+1}`});
+        left=mid+1;
+      }else{
+        steps.push({type:'go_left',left,right,mid,foundIdx:-1,newLeft:left,newRight:mid-1,
+          desc:`target=${TARGET} 不在右半，搜索左半 → right=${mid-1}`});
+        right=mid-1;
+      }
+    }
+  }
+  if(!steps.some(s=>s.type==='found')){
+    steps.push({type:'not_found',left,right,mid:-1,foundIdx:-1,
+      desc:`搜索结束，未找到 target=${TARGET}`});
+  }
+}
+
+function drawRec(step){
+  ctx.clearRect(0,0,500,400);
+  if(!step){ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',200,200);return;}
+  const x0=30,y0=25,lh=32;
+  ctx.font='12px monospace';ctx.textAlign='left';ctx.textBaseline='middle';
+  let y=y0;
+  for(let i=Math.max(0,currentStep-10);i<=currentStep&&i<steps.length;i++){
+    const s=steps[i];const isCur=i===currentStep;
+    const icons={start:'▶',compare:'⟷',left_sorted:'←',right_sorted:'→',go_left:'◄',go_right:'►',found:'★',not_found:'✗'};
+    const icon=icons[s.type]||'·';
+    ctx.fillStyle=isCur?'#e94560':s.type==='found'?'#16c79a':s.type==='not_found'?'#e94560':'#888';
+    if(isCur){ctx.fillStyle='#1a1a2e';ctx.fillRect(20,y-12,460,24);ctx.fillStyle='#e94560';}
+    ctx.fillText(icon+' '+s.desc.slice(0,48),x0,y);
+    y+=lh;if(y>380)break;
+  }
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildArray(step.left,step.right,step.mid,step.foundIdx);
+  document.getElementById('searchInfo').innerHTML=
+    `<span class="key">left=${step.left}</span> <span class="highlight">mid=${step.mid}</span> <span class="key" style="color:#e94560">right=${step.right}</span><br>`+
+    `nums[${step.mid}]=${step.mid>=0?NUMS[step.mid]:'-'}，target=${TARGET}`;
+  const rb=document.getElementById('resultBox');
+  if(step.type==='found'){rb.style.display='block';rb.className='result-box found';rb.textContent=`找到！索引 = ${step.foundIdx}`;}
+  else if(step.type==='not_found'){rb.style.display='block';rb.className='result-box not-found';rb.textContent='未找到';}
+  else{rb.style.display='none';}
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  drawRec(step);
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},900);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  buildArray(0,NUMS.length-1,-1,-1);
+  document.getElementById('searchInfo').textContent='等待开始...';
+  document.getElementById('resultBox').style.display='none';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  ctx.clearRect(0,0,500,400);ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',200,200);
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){currentStep--;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildArray(0,NUMS.length-1,-1,-1);
+</script>
+</body>
+</html>

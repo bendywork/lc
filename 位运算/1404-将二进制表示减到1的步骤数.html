@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>1404 - 将二进制表示减到1的步骤数</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>1404 - 将二进制表示减到1的步骤数</h1>
+<p id="desc">给定二进制字符串s，表示一个正整数。每步操作：若为奇数则加1(二进制末位1变0进位)，若为偶数则右移除以2(去掉末位0)。求将其变为"1"的步数。</p>
+<canvas id="cv" width="900" height="500"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="1200" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#e94560"></span>奇数(+1)</span>
+<span><span class="dot" style="background:#16c79a"></span>偶数(/2)</span>
+<span><span class="dot" style="background:#ffd700"></span>当前位</span>
+<span><span class="dot" style="background:#1a8fdd"></span>变化位</span>
+</div>
+<script>
+const inputStr="11111";
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  let s=inputStr;
+  let step=0;
+  steps.push({s,step,action:'init',desc:'初始值: 二进制 '+s+' = 十进制 '+parseInt(s,2)});
+  while(s!=='1'){
+    if(s[s.length-1]==='0'){
+      // even: divide by 2 (remove trailing 0)
+      const old=s;
+      s=s.slice(0,-1);
+      step++;
+      steps.push({s,step,action:'even',old,desc:`步骤${step}: "${old}" 末尾=0(偶数)，右移除以2 → "${s}" = ${parseInt(s,2)}`});
+    }else{
+      // odd: add 1
+      const old=s;
+      let num=parseInt(s,2)+1;
+      s=num.toString(2);
+      step++;
+      steps.push({s,step,action:'odd',old,desc:`步骤${step}: "${old}" 末尾=1(奇数)，加1 → ${parseInt(old,2)}+1=${num} = "${s}"`});
+    }
+  }
+  steps.push({s:'1',step,action:'done',desc:`完成！总步数 = ${step}`,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{s:inputStr,step:0,action:'init'}:steps[cur];
+  const binary=s.s;
+  const maxLen=Math.max(inputStr.length,binary.length);
+  const cellW=50,gap=4;
+  const totalW=maxLen*(cellW+gap)-gap;
+  const startX=(W-totalW)/2;
+
+  // title and step
+  ctx.fillStyle='#e94560';ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+  ctx.fillText('步骤 '+s.step,W/2,40);
+
+  // current binary representation
+  const binY=100;
+  ctx.fillStyle='#aaa';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('当前二进制:',W/2,binY-15);
+  for(let i=0;i<binary.length;i++){
+    const x=startX+i*(cellW+gap)+(maxLen-binary.length)*(cellW+gap)/2;
+    let bg='#2a2a4a';
+    if(s.action==='even'){
+      if(i===binary.length&&s.old)bg='#16c79a';// removed bit
+    }
+    if(s.action==='odd'){
+      if(i===binary.length-1)bg='#e94560';// changed bit
+    }
+    // highlight last bit
+    if(i===binary.length-1)bg=s.action==='odd'?'#e94560':s.action==='even'?'#16c79a':'#ffd700';
+    ctx.fillStyle=bg;
+    ctx.fillRect(x,binY,cellW,50);
+    ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,binY,cellW,50);
+    ctx.fillStyle='#eee';ctx.font='bold 24px sans-serif';ctx.textAlign='center';
+    ctx.fillText(binary[i],x+cellW/2,binY+33);
+  }
+  // index labels
+  for(let i=0;i<binary.length;i++){
+    const x=startX+i*(cellW+gap)+(maxLen-binary.length)*(cellW+gap)/2;
+    ctx.fillStyle='#666';ctx.font='10px sans-serif';ctx.textAlign='center';
+    ctx.fillText(binary.length-1-i,x+cellW/2,binY+66);
+  }
+
+  // decimal value
+  const decY=200;
+  ctx.fillStyle='#1a8fdd';ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+  ctx.fillText('= 十进制 '+parseInt(binary,2),W/2,decY);
+
+  // action visualization
+  const actionY=260;
+  if(s.action==='even'){
+    ctx.fillStyle='#16c79a';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillText('偶数操作：右移除以2 (去掉末位0)',W/2,actionY);
+    // show removal
+    if(s.old){
+      const oldLen=s.old.length;
+      for(let i=0;i<oldLen;i++){
+        const x=startX+i*(cellW+gap)+(maxLen-oldLen)*(cellW+gap)/2;
+        let bg=i===oldLen-1?'#16c79a':'#3a3a5a';
+        ctx.fillStyle=bg;
+        ctx.fillRect(x,actionY+20,cellW,40);
+        ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,actionY+20,cellW,40);
+        ctx.fillStyle=i===oldLen-1?'#fff':'#888';ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+        ctx.fillText(s.old[i],x+cellW/2,actionY+48);
+        if(i===oldLen-1){
+          ctx.strokeStyle='#e94560';ctx.lineWidth=2;
+          ctx.beginPath();ctx.moveTo(x,actionY+20);ctx.lineTo(x+cellW,actionY+60);ctx.stroke();
+          ctx.beginPath();ctx.moveTo(x+cellW,actionY+20);ctx.lineTo(x,actionY+60);ctx.stroke();
+        }
+      }
+    }
+  }else if(s.action==='odd'){
+    ctx.fillStyle='#e94560';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillText('奇数操作：加1 (二进制进位)',W/2,actionY);
+    // show before/after
+    if(s.old){
+      ctx.fillStyle='#888';ctx.font='14px sans-serif';ctx.textAlign='center';
+      ctx.fillText('加1前: '+s.old+' = '+parseInt(s.old,2)+'   →   加1后: '+s.s+' = '+parseInt(s.s,2),W/2,actionY+30);
+    }
+  }else if(s.action==='done'){
+    ctx.fillStyle='#ffd700';ctx.font='bold 30px sans-serif';ctx.textAlign='center';
+    ctx.fillText('已变为1！总步数 = '+s.step,W/2,actionY+20);
+  }
+
+  // step history
+  const histY=380;
+  ctx.fillStyle='#aaa';ctx.font='bold 13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('操作历史:',40,histY);
+  const histSteps=steps.filter((_,idx)=>idx<=cur&&idx>0);
+  const displayHist=histSteps.slice(-6);
+  for(let i=0;i<displayHist.length;i++){
+    const hy=histY+20+i*20;
+    const hs=displayHist[i];
+    ctx.fillStyle=hs.action==='even'?'#16c79a':'#e94560';
+    ctx.font='12px sans-serif';ctx.textAlign='left';
+    ctx.fillText(`步骤${hs.step}: ${hs.action==='even'?'/2':'  +1'} → ${hs.s}`,50,hy);
+  }
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>763 - 划分字母区间</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:1.6rem;margin-bottom:8px}
+.subtitle{color:#16c79a;font-size:.95rem;margin-bottom:16px}
+#canvas-wrap{background:#16213e;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+canvas{display:block}
+#desc-panel{background:#16213e;border-radius:10px;padding:14px 20px;width:800px;margin-bottom:12px;min-height:70px;border-left:4px solid #e94560}
+#desc-panel .step-num{color:#16c79a;font-weight:bold;font-size:1.1rem}
+#desc-panel .formula{color:#e94560;font-family:'Courier New',monospace;font-size:1rem;margin-top:6px}
+#desc-panel .explain{color:#b0b0b0;margin-top:4px;font-size:.9rem}
+#controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+button{background:#0f3460;color:#e0e0e0;border:2px solid #e94560;border-radius:8px;padding:8px 18px;font-size:1rem;cursor:pointer;transition:all .2s}
+button:hover{background:#e94560;color:#fff}
+button:active{transform:scale(.95)}
+#speed-label{color:#16c79a;font-size:.9rem}
+#speed{width:80px;accent-color:#e94560}
+.legend{display:flex;gap:16px;margin-top:10px;font-size:.85rem;flex-wrap:wrap;justify-content:center}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend .dot{width:14px;height:14px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>LeetCode 763 - 划分字母区间</h1>
+<p class="subtitle">贪心算法 · 同一字母最多出现在一个片段</p>
+<div id="canvas-wrap"><canvas id="cv" width="800" height="520"></canvas></div>
+<div id="desc-panel">
+  <div class="step-num">步骤 0 / 0</div>
+  <div class="formula"></div>
+  <div class="explain">点击 ▶ 或步骤按钮开始动画</div>
+</div>
+<div id="controls">
+  <button id="btn-reset">⏮ 重置</button>
+  <button id="btn-prev">◀ 上一步</button>
+  <button id="btn-play">▶ 播放</button>
+  <button id="btn-next">▶ 下一步</button>
+  <span id="speed-label">速度</span>
+  <input type="range" id="speed" min="1" max="10" value="3">
+</div>
+<div class="legend">
+  <span><span class="dot" style="background:#16c79a"></span>当前位置</span>
+  <span><span class="dot" style="background:#e94560"></span>当前片段边界</span>
+  <span><span class="dot" style="background:#533483"></span>已完成片段</span>
+  <span><span class="dot" style="background:#0f3460"></span>未扫描</span>
+</div>
+<script>
+const s="ababcbacadefegdehijhklij";
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=800,H=520;
+let steps=[],curStep=-1,playing=false,playTimer=null;
+const speedEl=document.getElementById('speed');
+
+const partColors=['#e94560','#16c79a','#533483','#f0a500','#0f3460','#ff6b6b','#4ecdc4','#45b7d1','#96ceb4','#ffeaa7'];
+
+function buildSteps(){
+  steps=[];
+  // build last occurrence map
+  const lastPos={};
+  for(let i=0;i<s.length;i++) lastPos[s[i]]=i;
+
+  // step 0: show last occurrence map
+  steps.push({i:-1,start:0,end:0,partitions:[],lastPos:{...lastPos},desc:'构建最后出现位置映射',formula:`last_pos = {${Object.entries(lastPos).map(([k,v])=>`${k}:${v}`).join(', ')}}`});
+
+  let start=0,end=0;
+  const partitions=[];
+  for(let i=0;i<s.length;i++){
+    const oldEnd=end;
+    end=Math.max(end,lastPos[s[i]]);
+    if(end>oldEnd){
+      steps.push({i,start,end,partitions:[...partitions],lastPos:{...lastPos},desc:`i=${i}: '${s[i]}' 的最后位置=${lastPos[s[i]]}，扩展边界`,formula:`end = max(${oldEnd}, last_pos['${s[i]}']) = max(${oldEnd}, ${lastPos[s[i]]}) = ${end}`});
+    }else{
+      steps.push({i,start,end,partitions:[...partitions],lastPos:{...lastPos},desc:`i=${i}: '${s[i]}' 的最后位置=${lastPos[s[i]]} ≤ end=${end}，边界不变`,formula:`end = max(${end}, ${lastPos[s[i]]}) = ${end}（不变）`});
+    }
+    if(i===end){
+      const len=end-start+1;
+      partitions.push({start,end,len});
+      steps.push({i,start,end,partitions:[...partitions],lastPos:{...lastPos},desc:`i=end=${i}，可以切分！片段长度=${len}`,formula:`partition: s[${start}..${end}] = "${s.substring(start,end+1)}", 长度 = ${len}`});
+      start=i+1;end=i+1;
+    }
+  }
+  steps.push({i:s.length-1,start,end,partitions:[...partitions],lastPos:{...lastPos},desc:'扫描完毕',formula:`划分结果: [${partitions.map(p=>p.len).join(', ')}]`});
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const st=curStep>=0?steps[curStep]:null;
+  const idx=st?st.i:-1;
+  const curStart=st?st.start:0;
+  const curEnd=st?st.end:0;
+  const parts=st?st.partitions:[];
+  const lp=st?st.lastPos:{};
+
+  const cellW=26,cellH=36,gap=2;
+  const charsPerRow=24;
+  const baseX=40,baseY=40;
+
+  // Title
+  ctx.fillStyle='#e0e0e0';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('字符串扫描',W/2,baseY-15);
+
+  // Draw string characters
+  const row0Y=baseY;
+  for(let i=0;i<s.length;i++){
+    const col=i%charsPerRow;
+    const row=Math.floor(i/charsPerRow);
+    const x=baseX+col*(cellW+gap);
+    const y=row0Y+row*(cellH+gap+20);
+
+    let bg='#0f3460';
+    // check if in completed partition
+    let partIdx=-1;
+    for(let p=0;p<parts.length;p++){
+      if(i>=parts[p].start&&i<=parts[p].end){partIdx=p;break;}
+    }
+    if(partIdx>=0){
+      bg=partColors[partIdx%partColors.length]+'55';
+    }else if(st&&i>=curStart&&i<=curEnd&&i<=idx){
+      bg='#e9456033';
+    }
+    if(i===idx)bg='#16c79a66';
+
+    ctx.fillStyle=bg;
+    ctx.beginPath();ctx.roundRect(x,y,cellW,cellH,4);ctx.fill();
+    ctx.strokeStyle=i===idx?'#16c79a':'#333';
+    ctx.lineWidth=i===idx?2.5:1;ctx.stroke();
+
+    ctx.fillStyle=i===idx?'#16c79a':'#e0e0e0';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(s[i],x+cellW/2,y+cellH/2+5);
+    ctx.fillStyle='#666';ctx.font='9px sans-serif';
+    ctx.fillText(i,x+cellW/2,y+cellH+10);
+  }
+
+  // Boundary indicator
+  if(st&&idx>=0&&curEnd>0){
+    const eCol=curEnd%charsPerRow;
+    const eRow=Math.floor(curEnd/charsPerRow);
+    const ex=baseX+eCol*(cellW+gap)+cellW;
+    const ey=row0Y+eRow*(cellH+gap+20);
+    ctx.strokeStyle='#e94560';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(ex+4,ey-4);ctx.lineTo(ex+4,ey+cellH+4);ctx.stroke();
+    ctx.fillStyle='#e94560';ctx.font='bold 11px sans-serif';ctx.textAlign='left';
+    ctx.fillText(`end=${curEnd}`,ex+8,ey+cellH/2);
+  }
+
+  // Last occurrence table
+  const tblY=row0Y+Math.ceil(s.length/charsPerRow)*(cellH+gap+20)+20;
+  ctx.fillStyle='#e0e0e0';ctx.font='bold 13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('最后出现位置表:',baseX,tblY);
+
+  const tCellW=40,tCellH=28,tGap=3;
+  const keys=Object.keys(lp).sort();
+  const tStartX=baseX;
+  const tStartY=tblY+8;
+  for(let k=0;k<keys.length;k++){
+    const col=k%18;
+    const row=Math.floor(k/18);
+    const x=tStartX+col*(tCellW+tGap);
+    const y=tStartY+row*(tCellH+tGap);
+    ctx.fillStyle='#533483';
+    ctx.beginPath();ctx.roundRect(x,y,tCellW,tCellH,3);ctx.fill();
+    ctx.fillStyle='#e0e0e0';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`${keys[k]}:${lp[keys[k]]}`,x+tCellW/2,y+tCellH/2+4);
+  }
+
+  // Partitions result
+  const resY=tblY+Math.ceil(keys.length/18)*(tCellH+tGap)+40;
+  ctx.fillStyle='#e0e0e0';ctx.font='bold 14px sans-serif';ctx.textAlign='left';
+  ctx.fillText('划分结果:',baseX,resY);
+  for(let p=0;p<parts.length;p++){
+    const x=baseX+p*160;
+    const y=resY+8;
+    ctx.fillStyle=partColors[p%partColors.length]+'88';
+    ctx.beginPath();ctx.roundRect(x,y,140,50,6);ctx.fill();
+    ctx.strokeStyle=partColors[p%partColors.length];ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#e0e0e0';ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`"${s.substring(parts[p].start,parts[p].end+1)}"`,x+70,y+22);
+    ctx.fillStyle='#16c79a';ctx.font='bold 14px sans-serif';
+    ctx.fillText(`长度: ${parts[p].len}`,x+70,y+42);
+  }
+}
+
+function updateDesc(){
+  const panel=document.getElementById('desc-panel');
+  if(curStep<0){panel.innerHTML=`<div class="step-num">步骤 0 / ${steps.length}</div><div class="explain">点击 ▶ 或步骤按钮开始动画</div>`;return;}
+  const s=steps[curStep];
+  panel.innerHTML=`<div class="step-num">步骤 ${curStep+1} / ${steps.length}</div><div class="formula">${s.formula}</div><div class="explain">${s.desc}</div>`;
+}
+
+function stepForward(){if(curStep<steps.length-1){curStep++;draw();updateDesc();}else stopPlay();}
+function stepBack(){if(curStep>0){curStep--;draw();updateDesc();}else{curStep=-1;draw();updateDesc();}}
+function startPlay(){if(playing)return;if(curStep>=steps.length-1)curStep=-1;playing=true;document.getElementById('btn-play').textContent='⏸ 暂停';tick();}
+function tick(){if(!playing)return;stepForward();if(curStep>=steps.length-1){stopPlay();return;}playTimer=setTimeout(tick,1200/speedEl.value);}
+function stopPlay(){playing=false;clearTimeout(playTimer);document.getElementById('btn-play').textContent='▶ 播放';}
+function reset(){stopPlay();curStep=-1;draw();updateDesc();}
+
+document.getElementById('btn-play').onclick=()=>playing?stopPlay():startPlay();
+document.getElementById('btn-next').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btn-prev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btn-reset').onclick=reset;
+
+buildSteps();draw();updateDesc();
+</script>
+</body>
+</html>

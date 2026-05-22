@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>76 - 最小覆盖子串</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:800px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:700px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>76 - 最小覆盖子串</h1>
+<p id="desc">给定字符串 s 和 t，找出 s 中涵盖 t 所有字符（含数量）的最小子串。滑动窗口扩展直到覆盖 t，然后收缩左边界寻找更小窗口。</p>
+<canvas id="cv" width="900" height="500"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="800" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#e94560"></span>左指针</span>
+<span><span class="dot" style="background:#16c79a"></span>右指针</span>
+<span><span class="dot" style="background:#ffd700"></span>最优窗口</span>
+<span><span class="dot" style="background:#5344a8"></span>当前窗口</span>
+<span><span class="dot" style="background:#1a8fdd"></span>已覆盖字符</span>
+</div>
+
+<script>
+const s='ADOBECODEBANC',t='ABC';
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const need={};
+  for(const c of t)need[c]=(need[c]||0)+1;
+  const needTotal=Object.keys(need).length;
+  let have={},haveCount=0,left=0,minLen=Infinity,minL=-1,minR=-1;
+  steps.push({left:0,right:-1,have:{...have},haveCount,minLen,minL,minR,desc:'初始化：need = '+JSON.stringify(need)+'，需要满足 '+needTotal+' 种字符',type:'init'});
+  for(let right=0;right<s.length;right++){
+    const ch=s[right];
+    if(need[ch]){
+      have[ch]=(have[ch]||0)+1;
+      if(have[ch]===need[ch])haveCount++;
+    }
+    const covered=haveCount===needTotal;
+    steps.push({left,right,have:{...have},haveCount,minLen,minL,minR,desc:`right=${right}，s[${right}]='${ch}'${need[ch]?' (需要此字符)':' (不需要)'}, ${covered?'窗口已覆盖 t ✓':'尚未覆盖 (还差 '+(needTotal-haveCount)+' 种)'}`,type:'expand',covered});
+    while(haveCount===needTotal){
+      if(right-left+1<minLen){
+        minLen=right-left+1;minL=left;minR=right;
+        steps.push({left,right,have:{...have},haveCount,minLen,minL,minR,desc:`找到覆盖窗口 [${left},${right}]，长度 ${minLen} = "${s.substring(minL,minR+1)}"，更新最优解`,type:'update',covered:true});
+      }
+      const lc=s[left];
+      if(need[lc]){
+        have[lc]--;
+        if(have[lc]<need[lc])haveCount--;
+      }
+      steps.push({left:left+1,right,have:{...have},haveCount,minLen,minL,minR,desc:`收缩左边界：移除 s[${left}]='${lc}'${need[lc]?' (需要的字符)':' '}，left → ${left+1}${haveCount<needTotal?'，窗口不再覆盖':''}`,type:'shrink',covered:haveCount===needTotal});
+      left++;
+    }
+  }
+  steps.push({left:s.length-1,right:s.length-1,have:{},haveCount,minLen,minL,minR,desc:`遍历完成，最小覆盖子串 = "${minL>=0?s.substring(minL,minR+1):''}"，长度 = ${minLen===Infinity?0:minLen}`,type:'end'});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=40,gap=4,n=s.length;
+const totalW=n*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2,cellH=55,sBaseY=80;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const st=cur<0?{left:0,right:-1,have:{},haveCount:0,minLen:Infinity,minL:-1,minR:-1,type:'init',covered:false}:steps[cur];
+  // draw t string
+  ctx.fillStyle='#888';ctx.font='14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('t = "'+t+'"',W/2,25);
+  // t character cells
+  const tCellW=36,tGap=4,tTotalW=t.length*(tCellW+tGap)-tGap;
+  const tOffX=(W-tTotalW)/2;
+  for(let i=0;i<t.length;i++){
+    const x=tOffX+i*(tCellW+tGap);
+    let bg='#2a2a5a',fg='#aaa';
+    if(st.have[t[i]]>=(({})[t[i]]||0)){bg='#1a3a2a';fg='#16c79a';}
+    if(st.have[t[i]]!==undefined&&st.have[t[i]]>=({'A':1,'B':1,'C':1}[t[i]]||0)){bg='#1a3a2a';fg='#16c79a';}
+    ctx.fillStyle=bg;ctx.strokeStyle='#3a3a7a';ctx.lineWidth=1;
+    roundRect(ctx,x,35,tCellW,28,4);ctx.fill();ctx.stroke();
+    ctx.fillStyle=fg;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(t[i],x+tCellW/2,35+19);
+  }
+  // s string label
+  ctx.fillStyle='#888';ctx.font='14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('s = "'+s+'"',W/2,sBaseY-8);
+  // current window
+  if(st.right>=0){
+    const x1=offsetX+st.left*(cellW+gap)-3,x2=offsetX+st.right*(cellW+gap)+cellW+3;
+    ctx.fillStyle='rgba(83,68,168,0.12)';
+    ctx.fillRect(x1,sBaseY,x2-x1,cellH);
+    ctx.strokeStyle='#5344a8';ctx.lineWidth=2;
+    ctx.strokeRect(x1,sBaseY,x2-x1,cellH);
+  }
+  // best window
+  if(st.minL>=0){
+    const x1=offsetX+st.minL*(cellW+gap)-2,x2=offsetX+st.minR*(cellW+gap)+cellW+2;
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=3;ctx.setLineDash([5,3]);
+    ctx.strokeRect(x1,sBaseY-2,x2-x1,cellH+4);
+    ctx.setLineDash([]);
+  }
+  // s character cells
+  const need={};for(const c of t)need[c]=(need[c]||0)+1;
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a5a',border='#3a3a7a',fg='#ccc';
+    const inWindow=st.right>=0&&i>=st.left&&i<=st.right;
+    if(need[s[i]]&&inWindow){bg='#1a3a2a';border='#1a8fdd';fg='#1a8fdd';}
+    if(i===st.left){border='#e94560';fg='#e94560';}
+    if(i===st.right){border='#16c79a';fg='#16c79a';}
+    ctx.fillStyle=bg;ctx.strokeStyle=border;ctx.lineWidth=2;
+    roundRect(ctx,x,sBaseY,cellW,cellH,6);ctx.fill();ctx.stroke();
+    ctx.fillStyle=fg;ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillText(s[i],x+cellW/2,sBaseY+cellH/2+6);
+    ctx.fillStyle='#555';ctx.font='10px sans-serif';
+    ctx.fillText(i,x+cellW/2,sBaseY+cellH+14);
+  }
+  // pointers
+  if(st.right>=0){
+    drawArrow(st.left,'#e94560','L',sBaseY);
+    drawArrow(st.right,'#16c79a','R',sBaseY);
+  }
+  // coverage status
+  const covered=st.covered;
+  ctx.fillStyle=covered?'#16c79a':'#e94560';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText(covered?'✓ 窗口已覆盖 t':'✗ 窗口未覆盖 t',W/2,sBaseY+cellH+35);
+  // frequency comparison
+  drawFreqComp(st);
+  // result
+  if(st.type==='end'&&st.minL>=0){
+    ctx.fillStyle='#ffd700';ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+    ctx.fillText('最小覆盖子串: "'+s.substring(st.minL,st.minR+1)+'"  长度: '+st.minLen,W/2,H-20);
+  }
+}
+
+function drawFreqComp(st){
+  const need={};for(const c of t)need[c]=(need[c]||0)+1;
+  const startX=60,startY=310;
+  ctx.fillStyle='#888';ctx.font='13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('字符计数对比 (need vs have):',startX,startY);
+  let px=startX,py=startY+18;
+  for(const ch of Object.keys(need)){
+    const needVal=need[ch],haveVal=st.have[ch]||0;
+    const satisfied=haveVal>=needVal;
+    ctx.fillStyle=satisfied?'#1a3a2a':'#3a1a1a';
+    ctx.strokeStyle=satisfied?'#16c79a':'#e94560';ctx.lineWidth=1;
+    roundRect(ctx,px,py,100,35,4);ctx.fill();ctx.stroke();
+    ctx.fillStyle=satisfied?'#16c79a':'#e94560';ctx.font='13px sans-serif';ctx.textAlign='left';
+    ctx.fillText(`'${ch}': need=${needVal} have=${haveVal}`,px+6,py+22);
+    ctx.fillStyle=satisfied?'#16c79a':'#e94560';ctx.textAlign='center';
+    ctx.fillText(satisfied?'✓':'✗',px+94,py+22);
+    px+=108;
+    if(px>W-120){px=startX;py+=42;}
+  }
+}
+
+function drawArrow(i,color,label,base){
+  const x=offsetX+i*(cellW+gap)+cellW/2;
+  ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x,base-22);ctx.lineTo(x-6,base-10);ctx.lineTo(x+6,base-10);ctx.closePath();ctx.fill();
+  ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText(label,x,base-27);
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

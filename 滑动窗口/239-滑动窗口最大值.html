@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>239 - 滑动窗口最大值</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:800px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>239 - 滑动窗口最大值</h1>
+<p id="desc">给定数组和窗口大小 k，返回每个滑动窗口的最大值。使用单调递减双端队列：新元素入队前移除所有比它小的尾部元素，队首即为当前窗口最大值。</p>
+<canvas id="cv" width="900" height="480"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="800" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#5344a8"></span>滑动窗口</span>
+<span><span class="dot" style="background:#ffd700"></span>队首（当前最大值）</span>
+<span><span class="dot" style="background:#e94560"></span>被移除的元素</span>
+<span><span class="dot" style="background:#16c79a"></span>结果</span>
+</div>
+
+<script>
+const nums=[1,3,-1,-3,5,3,6,7];
+const k=3;
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const deque=[];
+  const result=[];
+  steps.push({i:-1,deque:[...deque],result:[...result],desc:'初始化：空双端队列，窗口大小 k='+k,type:'init',removed:-1,windowL:-1,windowR:-1});
+  for(let i=0;i<nums.length;i++){
+    const removed=[];
+    while(deque.length>0&&nums[deque[deque.length-1]]<nums[i]){
+      removed.push(deque.pop());
+    }
+    deque.push(i);
+    if(removed.length>0){
+      steps.push({i,deque:[...deque],result:[...result],desc:`i=${i}，nums[${i}]=${nums[i]}，移除队尾较小元素 [${removed.map(x=>'nums['+x+']='+nums[x]).join(', ')}]，入队索引 ${i}`,type:'dequeue',removed,windowL:Math.max(0,i-k+1),windowR:i});
+    }else{
+      steps.push({i,deque:[...deque],result:[...result],desc:`i=${i}，nums[${i}]=${nums[i]}，队尾无更小元素，直接入队索引 ${i}`,type:'enqueue',removed:[],windowL:Math.max(0,i-k+1),windowR:i});
+    }
+    // remove out-of-window
+    if(deque[0]<=i-k){
+      const outIdx=deque.shift();
+      steps.push({i,deque:[...deque],result:[...result],desc:`队首索引 ${outIdx} 已超出窗口范围 [${i-k+1},${i}]，出队`,type:'outWindow',removed:[outIdx],windowL:i-k+1,windowR:i});
+    }
+    // record max
+    if(i>=k-1){
+      const maxVal=nums[deque[0]];
+      result.push(maxVal);
+      steps.push({i,deque:[...deque],result:[...result],desc:`窗口 [${i-k+1},${i}]，队首 nums[${deque[0]}]=${maxVal} 为最大值，加入结果`,type:'record',removed:[],windowL:i-k+1,windowR:i});
+    }
+  }
+  steps.push({i:nums.length-1,deque:[],result:[...result],desc:`完成，结果 = [${result.join(', ')}]`,type:'end',removed:[],windowL:-1,windowR:-1});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=60,gap=8,n=nums.length;
+const totalW=n*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2,cellH=65,baseY=100;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{i:-1,deque:[],result:[],type:'init',removed:[],windowL:-1,windowR:-1}:steps[cur];
+  // window highlight
+  if(s.windowL>=0){
+    const x1=offsetX+s.windowL*(cellW+gap)-4,x2=offsetX+s.windowR*(cellW+gap)+cellW+4;
+    ctx.fillStyle='rgba(83,68,168,0.15)';
+    ctx.fillRect(x1,baseY-8,x2-x1,cellH+16);
+    ctx.strokeStyle='#5344a8';ctx.lineWidth=2;
+    ctx.strokeRect(x1,baseY-8,x2-x1,cellH+16);
+    ctx.fillStyle='#5344a8';ctx.font='11px sans-serif';ctx.textAlign='center';
+    ctx.fillText('窗口 ['+s.windowL+','+s.windowR+']',x1+(x2-x1)/2,baseY-14);
+  }
+  // array cells
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a5a',border='#3a3a7a',fg='#ccc';
+    const inWindow=s.windowL>=0&&i>=s.windowL&&i<=s.windowR;
+    const inDeque=s.deque.includes(i);
+    if(inWindow){bg='#2a2a6a';border='#5344a8';}
+    if(inDeque&&i===s.deque[0]){bg='#3a3a00';border='#ffd700';fg='#ffd700';}
+    else if(inDeque){bg='#2a3a3a';border='#16c79a';fg='#16c79a';}
+    if(s.removed&&s.removed.includes(i)){bg='#3a1a1a';border='#e94560';fg='#e94560';}
+    ctx.fillStyle=bg;ctx.strokeStyle=border;ctx.lineWidth=2;
+    roundRect(ctx,x,baseY,cellW,cellH,6);ctx.fill();ctx.stroke();
+    ctx.fillStyle=fg;ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+    ctx.fillText(nums[i],x+cellW/2,baseY+cellH/2+6);
+    ctx.fillStyle='#555';ctx.font='11px sans-serif';
+    ctx.fillText(i,x+cellW/2,baseY+cellH+14);
+  }
+  // deque visualization
+  drawDeque(s);
+  // result display
+  if(s.result.length>0){
+    const resY=baseY+cellH+60;
+    ctx.fillStyle='#888';ctx.font='13px sans-serif';ctx.textAlign='center';
+    ctx.fillText('结果数组:',W/2,resY-8);
+    const rCellW=45,rGap=4;
+    const rTotalW=s.result.length*(rCellW+rGap)-rGap;
+    const rOffX=(W-rTotalW)/2;
+    for(let j=0;j<s.result.length;j++){
+      const x=rOffX+j*(rCellW+rGap);
+      ctx.fillStyle='#1a3a2a';ctx.strokeStyle='#16c79a';ctx.lineWidth=1;
+      roundRect(ctx,x,resY,rCellW,32,4);ctx.fill();ctx.stroke();
+      ctx.fillStyle='#16c79a';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+      ctx.fillText(s.result[j],x+rCellW/2,resY+22);
+    }
+  }
+  if(s.type==='end'){
+    ctx.fillStyle='#ffd700';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillText('最终结果: ['+s.result.join(', ')+']',W/2,H-20);
+  }
+}
+
+function drawDeque(s){
+  const dqY=baseY+cellH+115;
+  ctx.fillStyle='#888';ctx.font='13px sans-serif';ctx.textAlign='center';
+  ctx.fillText('双端队列（存储索引，值单调递减）:',W/2,dqY);
+  if(s.deque.length===0)return;
+  const dCellW=55,dGap=4;
+  const dTotalW=s.deque.length*(dCellW+dGap)-dGap;
+  const dOffX=(W-dTotalW)/2;
+  // bracket for deque
+  ctx.strokeStyle='#ffd700';ctx.lineWidth=1;ctx.setLineDash([3,2]);
+  ctx.strokeRect(dOffX-4,dqY+8,dTotalW+8,40);
+  ctx.setLineDash([]);
+  ctx.fillStyle='#666';ctx.font='10px sans-serif';ctx.textAlign='right';
+  ctx.fillText('队首→',dOffX-8,dqY+33);
+  ctx.textAlign='left';
+  ctx.fillText('←队尾',dOffX+dTotalW+8,dqY+33);
+  for(let j=0;j<s.deque.length;j++){
+    const x=dOffX+j*(dCellW+dGap);
+    const idx=s.deque[j];
+    let bg='#2a3a3a',border='#16c79a',fg='#16c79a';
+    if(j===0){bg='#3a3a00';border='#ffd700';fg='#ffd700';}
+    ctx.fillStyle=bg;ctx.strokeStyle=border;ctx.lineWidth=1;
+    roundRect(ctx,x,dqY+12,dCellW,32,4);ctx.fill();ctx.stroke();
+    ctx.fillStyle=fg;ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`[${idx}]=${nums[idx]}`,x+dCellW/2,dqY+33);
+  }
+}
+
+function drawArrow(i,color,label){
+  const x=offsetX+i*(cellW+gap)+cellW/2;
+  ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x,baseY-22);ctx.lineTo(x-6,baseY-10);ctx.lineTo(x+6,baseY-10);ctx.closePath();ctx.fill();
+  ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText(label,x,baseY-27);
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

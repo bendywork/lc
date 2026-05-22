@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>560 - 和为K的子数组</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>560 - 和为K的子数组</h1>
+<p id="desc">给定整数数组nums和整数k，统计数组中和为k的连续子数组个数。前缀和+哈希表：若存在前缀和prefixSum-k，则中间子数组和为k。</p>
+<canvas id="cv" width="900" height="520"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="1200" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#16c79a"></span>当前元素</span>
+<span><span class="dot" style="background:#1a8fdd"></span>前缀和</span>
+<span><span class="dot" style="background:#e94560"></span>匹配子数组</span>
+<span><span class="dot" style="background:#ffd700"></span>哈希表命中</span>
+</div>
+<script>
+const nums=[1,1,1];
+const k=2;
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const n=nums.length;
+  let prefixSum=0,cnt=0;
+  const mp={0:1};
+  const pfs=[0];
+  steps.push({i:-1,prefixSum:0,cnt:0,mp:{...mp},pfs:[0],desc:'初始化：prefixSum=0，哈希表{0:1}，cnt=0',matchKey:null,subarray:null});
+  for(let i=0;i<n;i++){
+    prefixSum+=nums[i];
+    pfs.push(prefixSum);
+    const matchKey=prefixSum-k;
+    const matchCnt=mp[matchKey]||0;
+    if(matchCnt>0){
+      cnt+=matchCnt;
+    }
+    steps.push({i,prefixSum,cnt,mp:{...mp},pfs:[...pfs],desc:`i=${i}: prefixSum += ${nums[i]} → ${prefixSum}，查找 prefixSum-k = ${prefixSum}-${k} = ${matchKey}${matchCnt>0?'，命中'+matchCnt+'次！cnt += '+matchCnt+' → '+cnt:'，未命中'}`,matchKey:matchCnt>0?matchKey:null,subarray:matchCnt>0?{start:0,end:i}:null});
+    mp[prefixSum]=(mp[prefixSum]||0)+1;
+    steps.push({i,prefixSum,cnt,mp:{...mp},pfs:[...pfs],desc:`更新哈希表：mp[${prefixSum}] = ${mp[prefixSum]}`,matchKey:null,subarray:null});
+  }
+  steps.push({i:n,prefixSum,cnt,mp:{...mp},pfs:[...pfs],desc:`遍历结束！和为${k}的子数组共 ${cnt} 个`,matchKey:null,subarray:null,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{i:-1,prefixSum:0,cnt:0,mp:{0:1},pfs:[0],matchKey:null,subarray:null}:steps[cur];
+  const n=nums.length;
+  const cellW=80,gap=15;
+  const totalW=(n+1)*(cellW+gap)-gap;
+  const offsetX=(W-totalW)/2;
+
+  // nums row
+  const numsY=50;
+  ctx.fillStyle='#aaa';ctx.font='bold 14px sans-serif';ctx.textAlign='right';
+  ctx.fillText('nums:',offsetX-10,numsY+18);
+  for(let i=0;i<n;i++){
+    const x=offsetX+(i+1)*(cellW+gap);
+    let bg='#2a2a4a';
+    if(s.i===i)bg='#16c79a';
+    if(s.subarray&&i>=s.subarray.start&&i<=s.subarray.end)bg='#e94560';
+    ctx.fillStyle=bg;
+    ctx.fillRect(x,numsY,cellW,30);
+    ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,numsY,cellW,30);
+    ctx.fillStyle='#eee';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(nums[i],x+cellW/2,numsY+20);
+  }
+
+  // prefix sum row
+  const pfY=120;
+  ctx.fillStyle='#1a8fdd';ctx.font='bold 14px sans-serif';ctx.textAlign='right';
+  ctx.fillText('前缀和:',offsetX-10,pfY+18);
+  const pfs=s.pfs||[0];
+  for(let i=0;i<pfs.length;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#1a3a5a';
+    if(i===pfs.length-1&&s.i>=0)bg='#1a8fdd';
+    ctx.fillStyle=bg;
+    ctx.fillRect(x,pfY,cellW,30);
+    ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,pfY,cellW,30);
+    ctx.fillStyle='#eee';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(pfs[i],x+cellW/2,pfY+20);
+    ctx.fillStyle='#666';ctx.font='11px sans-serif';
+    ctx.fillText('ps'+i,x+cellW/2,pfY+46);
+  }
+
+  // highlight matchKey
+  if(s.matchKey!==null){
+    for(let i=0;i<pfs.length;i++){
+      if(pfs[i]===s.matchKey){
+        const x=offsetX+i*(cellW+gap);
+        ctx.strokeStyle='#ffd700';ctx.lineWidth=3;ctx.strokeRect(x-2,pfY-2,cellW+4,34);
+        ctx.fillStyle='#ffd700';ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+        ctx.fillText('命中!',x+cellW/2,pfY-8);
+      }
+    }
+  }
+
+  // hashmap visualization
+  const hmX=650,hmY=50,hmW=220,cellH=28;
+  ctx.fillStyle='#16213e';ctx.fillRect(hmX,hmY,hmW,280);
+  ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(hmX,hmY,hmW,280);
+  ctx.fillStyle='#16c79a';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+  ctx.fillText('哈希表 mp',hmX+hmW/2,hmY+18);
+  const keys=Object.keys(s.mp);
+  for(let j=0;j<keys.length&&j<8;j++){
+    const cy=hmY+28+j*cellH;
+    let bg='#0f3460';
+    if(s.matchKey!==null&&keys[j]==s.matchKey.toString())bg='#ffd700';
+    ctx.fillStyle=bg;
+    ctx.fillRect(hmX+5,cy,hmW-10,cellH-4);
+    ctx.fillStyle='#eee';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`ps=${keys[j]} → 次数:${s.mp[keys[j]]}`,hmX+hmW/2,cy+17);
+  }
+
+  // cnt display
+  ctx.fillStyle='#ffd700';ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+  ctx.fillText('cnt = '+s.cnt,W/2,H-50);
+
+  // formula
+  ctx.fillStyle='#aaa';ctx.font='13px sans-serif';ctx.textAlign='center';
+  ctx.fillText('核心思想：若存在 prefixSum[j] = prefixSum[i] - k，则 nums[j..i-1] 和为k',W/2,H-25);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

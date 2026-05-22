@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>48 - 旋转图像</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>48 - 旋转图像</h1>
+<p id="desc">给定n×n矩阵，将其顺时针旋转90度。分两步：1) 转置矩阵(沿主对角线交换)；2) 反转每一行。</p>
+<canvas id="cv" width="900" height="520"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="1000" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#e94560"></span>交换的两个元素</span>
+<span><span class="dot" style="background:#16c79a"></span>已转置</span>
+<span><span class="dot" style="background:#1a8fdd"></span>反转操作</span>
+<span><span class="dot" style="background:#ffd700"></span>完成</span>
+</div>
+<script>
+const orig=[[1,2,3],[4,5,6],[7,8,9]];
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const n=orig.length;
+  const mat=orig.map(r=>[...r]);
+  steps.push({mat:mat.map(r=>[...r]),phase:'init',swap:null,rev:null,desc:'初始矩阵，准备顺时针旋转90°'});
+  // phase 1: transpose
+  steps.push({mat:mat.map(r=>[...r]),phase:'transpose-start',swap:null,rev:null,desc:'阶段1：沿主对角线转置 matrix[i][j] ↔ matrix[j][i]'});
+  for(let i=0;i<n;i++){
+    for(let j=i+1;j<n;j++){
+      const a=mat[i][j],b=mat[j][i];
+      mat[i][j]=b;mat[j][i]=a;
+      steps.push({mat:mat.map(r=>[...r]),phase:'transpose',swap:{i,j,oldA:a,oldB:b},rev:null,desc:`转置: mat[${i}][${j}]=${a} ↔ mat[${j}][${i}]=${b}`});
+    }
+  }
+  steps.push({mat:mat.map(r=>[...r]),phase:'transpose-done',swap:null,rev:null,desc:'转置完成！阶段2：反转每一行'});
+  // phase 2: reverse rows
+  for(let i=0;i<n;i++){
+    let l=0,r=n-1;
+    while(l<r){
+      const a=mat[i][l],b=mat[i][r];
+      mat[i][l]=b;mat[i][r]=a;
+      steps.push({mat:mat.map(r=>[...r]),phase:'reverse',swap:null,rev:{i,l,r,oldA:a,oldB:b},desc:`反转第${i}行: mat[${i}][${l}]=${a} ↔ mat[${i}][${r}]=${b}`});
+      l++;r--;
+    }
+  }
+  steps.push({mat:mat.map(r=>[...r]),phase:'done',swap:null,rev:null,desc:'旋转完成！矩阵已顺时针旋转90°',final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellSize=70,gap=4;
+const n=orig.length;
+const gridW=n*(cellSize+gap)-gap;
+
+function drawGrid(gx,gy,mat,label,s){
+  ctx.fillStyle='#aaa';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText(label,gx+gridW/2,gy-12);
+  for(let i=0;i<n;i++){
+    for(let j=0;j<n;j++){
+      const x=gx+j*(cellSize+gap);
+      const y=gy+i*(cellSize+gap);
+      let bg='#2a2a4a';
+      // transpose highlight
+      if(s.swap){
+        if(i===s.swap.i&&j===s.swap.j)bg='#e94560';
+        if(i===s.swap.j&&j===s.swap.i)bg='#e94560';
+      }
+      // reverse highlight
+      if(s.rev&&i===s.rev.i){
+        if(j===s.rev.l||j===s.rev.r)bg='#1a8fdd';
+      }
+      // done
+      if(s.final)bg='#4a4a2a';
+      ctx.fillStyle=bg;
+      ctx.fillRect(x,y,cellSize,cellSize);
+      ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,y,cellSize,cellSize);
+      ctx.fillStyle='#eee';ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+      ctx.fillText(mat[i][j],x+cellSize/2,y+cellSize/2+6);
+      // diagonal highlight for transpose
+      if(s.phase==='transpose-start'&&i===j){
+        ctx.fillStyle='rgba(233,69,96,0.3)';
+        ctx.fillRect(x,y,cellSize,cellSize);
+      }
+    }
+  }
+  // diagonal line for transpose
+  if(s.phase==='transpose-start'||s.phase==='transpose'){
+    ctx.strokeStyle='#e94560';ctx.lineWidth=2;ctx.setLineDash([6,3]);
+    ctx.beginPath();ctx.moveTo(gx,gy);ctx.lineTo(gx+gridW,gy+gridW);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{mat:orig.map(r=>[...r]),phase:'init',swap:null,rev:null}:steps[cur];
+  // original matrix (left)
+  const origGX=80,origGY=80;
+  ctx.fillStyle='#888';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+  ctx.fillText('原始矩阵',origGX+gridW/2,origGY-12);
+  for(let i=0;i<n;i++){
+    for(let j=0;j<n;j++){
+      const x=origGX+j*(cellSize+gap);
+      const y=origGY+i*(cellSize+gap);
+      ctx.fillStyle='#3a3a5a';
+      ctx.fillRect(x,y,cellSize,cellSize);
+      ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,y,cellSize,cellSize);
+      ctx.fillStyle='#bbb';ctx.font='16px sans-serif';ctx.textAlign='center';
+      ctx.fillText(orig[i][j],x+cellSize/2,y+cellSize/2+5);
+    }
+  }
+  // current matrix (right)
+  const curGX=W-80-gridW,curGY=80;
+  drawGrid(curGX,curGY,s.mat,s.phase==='done'?'旋转结果':s.phase.startsWith('transpose')?'转置中...':'反转行中...',s);
+  // arrow between
+  ctx.fillStyle='#ffd700';ctx.font='bold 24px sans-serif';ctx.textAlign='center';
+  ctx.fillText('→',W/2,80+gridW/2);
+  // phase label
+  let phaseLabel='';
+  if(s.phase==='init')phaseLabel='初始状态';
+  else if(s.phase==='transpose-start')phaseLabel='步骤1: 转置 (沿对角线交换)';
+  else if(s.phase==='transpose')phaseLabel='步骤1: 转置中';
+  else if(s.phase==='transpose-done')phaseLabel='步骤2: 反转每行';
+  else if(s.phase==='reverse')phaseLabel='步骤2: 反转行中';
+  else if(s.phase==='done')phaseLabel='旋转90° 完成!';
+  ctx.fillStyle='#e94560';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+  ctx.fillText(phaseLabel,W/2,H-40);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

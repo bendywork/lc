@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>442 - 数组中重复的数据</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>442 - 数组中重复的数据</h1>
+<p id="desc">给定长度为n的数组，其中所有元素在[1,n]范围内，找出所有出现两次的元素。利用取负标记：访问位置i时，将nums[|nums[i]|-1]取负表示已访问，若已为负则找到重复。</p>
+<canvas id="cv" width="900" height="480"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="1000" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#16c79a"></span>当前位置</span>
+<span><span class="dot" style="background:#1a8fdd"></span>目标位置</span>
+<span><span class="dot" style="background:#e94560"></span>发现重复!</span>
+<span><span class="dot" style="background:#0f3460"></span>已取负(已访问)</span>
+<span><span class="dot" style="background:#ffd700"></span>重复结果</span>
+</div>
+<script>
+const origArr=[4,3,2,7,8,2,3,1];
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const n=origArr.length;
+  const arr=[...origArr];
+  const res=[];
+  steps.push({arr:[...arr],cur:-1,target:-1,res:[],action:'init',desc:'初始数组，利用取负标记法查找重复元素'});
+  for(let i=0;i<n;i++){
+    const val=Math.abs(arr[i]);
+    const targetIdx=val-1;
+    steps.push({arr:[...arr],cur:i,target:targetIdx,res:[...res],action:'check',desc:`i=${i}: |arr[${i}]| = |${arr[i]}| = ${val}，查看位置 arr[${targetIdx}]`});
+    if(arr[targetIdx]<0){
+      res.push(val);
+      steps.push({arr:[...arr],cur:i,target:targetIdx,res:[...res],action:'found',desc:`arr[${targetIdx}]=${arr[targetIdx]} < 0，已访问过！${val}是重复元素！`});
+    }else{
+      arr[targetIdx]=-arr[targetIdx];
+      steps.push({arr:[...arr],cur:i,target:targetIdx,res:[...res],action:'negate',desc:`arr[${targetIdx}]=${origArr[targetIdx]} > 0，取负标记 → ${arr[targetIdx]}，表示值${val}已出现过`});
+    }
+  }
+  steps.push({arr:[...arr],cur:-1,target:-1,res:[...res],action:'done',desc:`查找完成！重复元素 = [${res.join(', ')}]`,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=80,gap=15,n=origArr.length;
+const totalW=n*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2;
+const baseY=180;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{arr:[...origArr],cur:-1,target:-1,res:[],action:'init'}:steps[cur];
+  const arr=s.arr;
+  // draw cells
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a4a';
+    const val=arr[i];
+    if(val<0)bg='#0f3460';
+    if(s.cur===i)bg='#16c79a';
+    if(s.target===i&&s.action!=='init')bg='#1a8fdd';
+    if(s.action==='found'&&s.target===i)bg='#e94560';
+    if(s.res.includes(Math.abs(origArr[i]))&&s.final)bg='#ffd700';
+    ctx.fillStyle=bg;
+    ctx.fillRect(x,baseY,cellW,50);
+    ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,baseY,cellW,50);
+    ctx.fillStyle=val<0?'#e94560':'#eee';ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+    ctx.fillText(val,x+cellW/2,baseY+32);
+    // index
+    ctx.fillStyle='#888';ctx.font='11px sans-serif';
+    ctx.fillText('['+i+']',x+cellW/2,baseY+68);
+    // index reference label
+    ctx.fillStyle='#666';ctx.font='10px sans-serif';
+    ctx.fillText('→'+(i+1),x+cellW/2,baseY-8);
+  }
+  // arrow from current to target
+  if(s.cur>=0&&s.target>=0&&s.action!=='init'){
+    const x1=offsetX+s.cur*(cellW+gap)+cellW/2;
+    const x2=offsetX+s.target*(cellW+gap)+cellW/2;
+    ctx.strokeStyle=s.action==='found'?'#e94560':'#1a8fdd';ctx.lineWidth=2;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(x1,baseY-20);ctx.lineTo(x2,baseY-20);ctx.stroke();
+    ctx.setLineDash([]);
+    // arrowhead
+    ctx.fillStyle=s.action==='found'?'#e94560':'#1a8fdd';
+    ctx.beginPath();ctx.moveTo(x2,baseY-20);ctx.lineTo(x2-8,baseY-26);ctx.lineTo(x2-8,baseY-14);ctx.closePath();ctx.fill();
+  }
+  // result display
+  if(s.res.length>0){
+    const resY=340;
+    ctx.fillStyle='#ffd700';ctx.font='bold 16px sans-serif';ctx.textAlign='left';
+    ctx.fillText('发现的重复元素:',40,resY);
+    for(let i=0;i<s.res.length;i++){
+      const rx=200+i*80;
+      ctx.fillStyle='#4a4a2a';
+      ctx.fillRect(rx,resY-15,60,30);
+      ctx.strokeStyle='#ffd700';ctx.lineWidth=2;ctx.strokeRect(rx,resY-15,60,30);
+      ctx.fillStyle='#ffd700';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+      ctx.fillText(s.res[i],rx+30,resY+5);
+    }
+  }
+  // formula
+  ctx.fillStyle='#aaa';ctx.font='13px sans-serif';ctx.textAlign='center';
+  ctx.fillText('核心：|arr[i]| 对应位置 arr[|arr[i]|-1]，取负表示已访问，遇到已取负则找到重复',W/2,H-30);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

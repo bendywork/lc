@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>78-子集</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:300px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+canvas{display:block;margin:0 auto;background:#0f3460;border-radius:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.array-vis{display:flex;gap:6px;margin:12px 0}
+.arr-cell{width:48px;height:48px;background:#0f3460;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:bold;font-family:monospace;border:2px solid #333;transition:all .3s;position:relative}
+.arr-cell.included{border-color:#16c79a;background:#16c79a33;color:#16c79a}
+.arr-cell.excluded{border-color:#e94560;background:#e9456022;color:#e94560}
+.arr-cell.pending{border-color:#555;color:#555}
+.arr-cell .label{position:absolute;bottom:-18px;font-size:10px}
+.subset-display{background:#0f3460;border-radius:8px;padding:10px;margin-top:10px;font-family:monospace;color:#16c79a;font-size:14px;min-height:30px}
+.result-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;max-height:200px;overflow-y:auto}
+.result-tag{background:#0f3460;color:#16c79a;padding:3px 8px;border-radius:4px;font-size:12px;font-family:monospace}
+.result-tag.current{background:#e94560;color:#fff}
+</style>
+</head>
+<body>
+<h1>78 - 子集</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">包含/排除决策树</div>
+<canvas id="treeCanvas" width="560" height="480"></canvas>
+</div>
+<div class="panel">
+<div class="panel-title">数组状态</div>
+<div style="color:#aaa;font-size:13px">nums = [1, 2, 3]</div>
+<div class="array-vis" id="arrayVis"></div>
+<div class="subset-display" id="subsetDisp">当前子集: []</div>
+<div style="margin-top:16px"><div style="color:#aaa;font-size:13px;margin-bottom:6px">所有子集:</div><div class="result-list" id="resultList"></div></div>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const NUMS=[1,2,3];
+const canvas=document.getElementById('treeCanvas');
+const ctx=canvas.getContext('2d');
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function buildArrayVis(idx,decisions){
+  const vis=document.getElementById('arrayVis');vis.innerHTML='';
+  NUMS.forEach((v,i)=>{
+    const cls=i<idx?(decisions[i]?'included':'excluded'):i===idx?'pending':'pending';
+    const lbl=i<idx?(decisions[i]?'含':'排'):'';
+    vis.innerHTML+=`<div class="arr-cell ${cls}">${v}<span class="label">${lbl}</span></div>`;
+  });
+}
+
+function generateSteps(){
+  steps=[];
+  const treeNodes=[];let nid=0;
+  function dfs(idx,subset,decisions,parentId,depth){
+    const id=nid++;
+    const node={id,subset:[...subset],idx,depth,children:[],isResult:true,decisions:[...decisions]};
+    treeNodes.push(node);
+    if(parentId!==null){const p=treeNodes.find(n=>n.id===parentId);if(p)p.children.push(id);}
+    steps.push({type:'visit',subset:[...subset],idx,nodes:[...treeNodes],nodeId:id,decisions:[...decisions],
+      desc:`访问节点：当前子集 [${subset.length?subset.join(','):'空'}]，idx=${idx}`});
+    if(idx===NUMS.length){
+      steps.push({type:'leaf',subset:[...subset],idx,nodes:[...treeNodes],nodeId:id,decisions:[...decisions],
+        desc:`叶子节点：子集 [${subset.length?subset.join(','):'空'}] 确定`});
+      return;
+    }
+    // include
+    steps.push({type:'include',subset:[...subset,NUMS[idx]],idx:idx+1,nodes:[...treeNodes],nodeId:id,decisions:[...decisions,true],val:NUMS[idx],
+      desc:`选择包含 nums[${idx}]=${NUMS[idx]} → 子集变为 [${[...subset,NUMS[idx]].join(',')}]`});
+    dfs(idx+1,[...subset,NUMS[idx]],[...decisions,true],id,depth+1);
+    // exclude
+    steps.push({type:'exclude',subset:[...subset],idx:idx+1,nodes:[...treeNodes],nodeId:id,decisions:[...decisions,false],val:NUMS[idx],
+      desc:`选择排除 nums[${idx}]=${NUMS[idx]} → 子集保持 [${subset.length?subset.join(','):'空'}]`});
+    dfs(idx+1,[...subset],[...decisions,false],id,depth+1);
+  }
+  steps.push({type:'start',subset:[],idx:0,nodes:[],nodeId:null,decisions:[],
+    desc:`开始子集枚举，nums=[${NUMS.join(',')}]`});
+  dfs(0,[],[],null,0);
+  steps.push({type:'done',subset:[],idx:0,nodes:[],nodeId:null,decisions:[],
+    desc:`枚举完成，共 ${Math.pow(2,NUMS.length)} 个子集`});
+}
+
+function layoutNodes(nodes){
+  const pos={};const leaves=[];
+  function getLeaves(node){
+    if(node.children.length===0){leaves.push(node.id);return;}
+    node.children.forEach(cid=>{const c=nodes.find(n=>n.id===cid);if(c)getLeaves(c);});
+  }
+  if(nodes.length>0)getLeaves(nodes[0]);
+  const lw=50;const tw=leaves.length*lw;const sx=Math.max(15,(560-tw)/2);
+  const lm={};leaves.forEach((lid,i)=>lm[lid]=sx+i*lw+lw/2);
+  function posN(node){
+    if(node.children.length===0){pos[node.id]={x:lm[node.id]||280,y:30+node.depth*50};return pos[node.id].x;}
+    let sum=0;node.children.forEach(cid=>{const c=nodes.find(n=>n.id===cid);if(c)sum+=posN(c);});
+    const avg=sum/node.children.length;
+    pos[node.id]={x:avg,y:30+node.depth*50};return avg;
+  }
+  if(nodes.length>0)posN(nodes[0]);return pos;
+}
+
+function drawTree(step){
+  ctx.clearRect(0,0,560,480);
+  if(!step||!step.nodes||step.nodes.length===0){ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,220);return;}
+  const nodes=step.nodes;const pos=layoutNodes(nodes);
+  // Draw edges
+  nodes.forEach(node=>{
+    const p=pos[node.id];if(!p)return;
+    node.children.forEach((cid,ci)=>{
+      const cp=pos[cid];if(!cp)return;
+      const isInclude=ci===0;
+      const isOn=step.subset&&node.subset&&step.subset.length>=node.subset.length&&step.subset.every((v,i)=>node.subset[i]===v);
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(cp.x,cp.y);
+      ctx.strokeStyle=isOn?(isInclude?'#16c79a':'#e94560'):'#333';
+      ctx.lineWidth=isOn?2:1;ctx.stroke();
+      // Edge label
+      const mx=(p.x+cp.x)/2,my=(p.y+cp.y)/2;
+      ctx.fillStyle=isOn?(isInclude?'#16c79a':'#e94560'):'#555';
+      ctx.font='bold 10px Microsoft YaHei';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(isInclude?'含':'排',mx+8,my-8);
+    });
+  });
+  // Draw nodes
+  nodes.forEach(node=>{
+    const p=pos[node.id];if(!p)return;
+    const isCur=step.nodeId===node.id;
+    const isOn=step.subset&&node.subset&&step.subset.length>=node.subset.length&&step.subset.every((v,i)=>node.subset[i]===v);
+    const r=isCur?16:isOn?14:10;
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);
+    ctx.fillStyle=isCur?'#e94560':isOn?'#16c79a':'#16213e';
+    ctx.fill();ctx.strokeStyle=isCur?'#e94560':isOn?'#16c79a':'#555';ctx.lineWidth=isCur?2:1;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='9px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    const lbl=node.subset.length?`[${node.subset.join(',')}]`:'[]';
+    ctx.fillText(node.subset.length<=2?lbl:lbl.slice(0,5)+'..',p.x,p.y);
+  });
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildArrayVis(step.idx,step.decisions||[]);
+  document.getElementById('subsetDisp').textContent=`当前子集: [${step.subset?step.subset.join(','):'空'}]`;
+  if(step.type==='leaf'||step.type==='visit'){
+    const rl=document.getElementById('resultList');
+    const existing=Array.from(rl.querySelectorAll('.result-tag')).map(t=>t.textContent);
+    const key=`[${step.subset.join(',')}]`;
+    if(!existing.includes(key)){
+      const tag=document.createElement('span');tag.className='result-tag';tag.textContent=key;rl.appendChild(tag);
+    }
+  }
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  drawTree(step);
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},600);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  document.getElementById('resultList').innerHTML='';
+  buildArrayVis(0,[]);
+  document.getElementById('subsetDisp').textContent='当前子集: []';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  ctx.clearRect(0,0,560,480);ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,220);
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){currentStep--;
+  document.getElementById('resultList').innerHTML='';
+  for(let i=0;i<=currentStep;i++){
+    const s=steps[i];
+    if(s.type==='leaf'||s.type==='visit'){
+      const key=`[${s.subset.join(',')}]`;
+      const tag=document.createElement('span');tag.className='result-tag';tag.textContent=key;
+      document.getElementById('resultList').appendChild(tag);
+    }
+  }
+  updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildArrayVis(0,[]);ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,220);
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>215 - 数组中的第K个最大元素</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>215 - 数组中的第K个最大元素</h1>
+<p id="desc">给定数组和整数k，返回数组中第k个最大元素。使用最小堆：先建堆（前k个元素），再遍历剩余元素，若大于堆顶则替换并下沉，最终堆顶即为第k大。</p>
+<canvas id="cv" width="900" height="520"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="1000" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#1a8fdd"></span>堆中元素</span>
+<span><span class="dot" style="background:#e94560"></span>堆顶(最小)</span>
+<span><span class="dot" style="background:#16c79a"></span>当前考察</span>
+<span><span class="dot" style="background:#ffd700"></span>第K大结果</span>
+</div>
+<script>
+const nums=[3,2,1,5,6,4];
+const k=2;
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const n=nums.length;
+  // Build min heap of first k elements
+  const heap=nums.slice(0,k);
+  function heapify(arr,i,size){
+    let smallest=i;const l=2*i+1,r=2*i+2;
+    if(l<size&&arr[l]<arr[smallest])smallest=l;
+    if(r<size&&arr[r]<arr[smallest])smallest=r;
+    if(smallest!==i){
+      [arr[i],arr[smallest]]=[arr[smallest],arr[i]];
+      return smallest;
+    }
+    return-1;
+  }
+  function buildMinHeap(arr){
+    for(let i=Math.floor(arr.length/2)-1;i>=0;i--){
+      let cur=i;
+      while(cur>=0){
+        const next=heapify(arr,cur,arr.length);
+        if(next===-1)break;
+        cur=next;
+      }
+    }
+  }
+  function siftDown(arr,i,size){
+    let cur=i;
+    while(true){
+      const next=heapify(arr,cur,size);
+      if(next===-1)break;
+      steps.push({heap:[...arr],phase:'siftdown',swapPair:[cur,next],curExam:-1,desc:`下沉：交换 arr[${cur}]=${arr[next]} ↔ arr[${next}]=${arr[cur]}`});
+      cur=next;
+    }
+  }
+  steps.push({heap:[...heap],phase:'init',swapPair:null,curExam:-1,desc:`初始化：取前${k}个元素 [${heap.join(', ')}] 建最小堆`});
+  buildMinHeap(heap);
+  steps.push({heap:[...heap],phase:'built',swapPair:null,curExam:-1,desc:`建堆完成：最小堆 = [${heap.join(', ')}]，堆顶=${heap[0]}`});
+  // Process remaining elements
+  for(let i=k;i<n;i++){
+    steps.push({heap:[...heap],phase:'examine',swapPair:null,curExam:i,desc:`考察 nums[${i}]=${nums[i]}，与堆顶 ${heap[0]} 比较`});
+    if(nums[i]>heap[0]){
+      const oldTop=heap[0];
+      heap[0]=nums[i];
+      steps.push({heap:[...heap],phase:'replace',swapPair:null,curExam:i,desc:`${nums[i]} > ${oldTop}，替换堆顶 ${oldTop} → ${nums[i]}`});
+      siftDown(heap,0,k);
+    }else{
+      steps.push({heap:[...heap],phase:'skip',swapPair:null,curExam:i,desc:`${nums[i]} ≤ ${heap[0]}，跳过`});
+    }
+  }
+  steps.push({heap:[...heap],phase:'done',swapPair:null,curExam:-1,desc:`遍历结束！第${k}大元素 = ${heap[0]}`,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=70,gap=12,n=nums.length;
+const totalW=n*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{heap:nums.slice(0,k),phase:'init',swapPair:null,curExam:-1}:steps[cur];
+  const heap=s.heap;
+  // draw original array
+  const arrY=40;
+  ctx.fillStyle='#aaa';ctx.font='bold 13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('原数组:',40,arrY+16);
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a4a';
+    if(i<k)bg='#1a3a5a';
+    if(s.curExam===i)bg='#16c79a';
+    ctx.fillStyle=bg;
+    ctx.fillRect(x,arrY,cellW,30);
+    ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,arrY,cellW,30);
+    ctx.fillStyle='#eee';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(nums[i],x+cellW/2,arrY+20);
+    ctx.fillStyle='#888';ctx.font='10px sans-serif';
+    ctx.fillText('['+i+']',x+cellW/2,arrY+44);
+  }
+  // draw heap tree
+  const heapY=150;
+  ctx.fillStyle='#1a8fdd';ctx.font='bold 14px sans-serif';ctx.textAlign='left';
+  ctx.fillText('最小堆:',40,heapY);
+  const heapCX=W/2,heapTopY=heapY+20;
+  const levelH=60,nodeR=22;
+  function drawHeapNode(idx,x,y){
+    if(idx>=heap.length)return;
+    let bg='#1a3a5a';
+    if(idx===0)bg='#e94560';
+    if(s.swapPair&&(s.swapPair[0]===idx||s.swapPair[1]===idx))bg='#ffd700';
+    ctx.fillStyle=bg;
+    ctx.beginPath();ctx.arc(x,y,nodeR,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle='#eee';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(heap[idx],x,y+5);
+    // children
+    const lIdx=2*idx+1,rIdx=2*idx+2;
+    const childY=y+levelH;
+    const spread=Math.max(60,160/(Math.floor(Math.log2(idx+1))+1));
+    if(lIdx<heap.length){
+      const lx=x-spread;
+      ctx.strokeStyle='#555';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y+nodeR);ctx.lineTo(lx,childY-nodeR);ctx.stroke();
+      drawHeapNode(lIdx,lx,childY);
+    }
+    if(rIdx<heap.length){
+      const rx=x+spread;
+      ctx.strokeStyle='#555';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y+nodeR);ctx.lineTo(rx,childY-nodeR);ctx.stroke();
+      drawHeapNode(rIdx,rx,childY);
+    }
+  }
+  drawHeapNode(0,heapCX,heapTopY);
+  // heap array representation
+  const hArrY=380;
+  ctx.fillStyle='#aaa';ctx.font='bold 12px sans-serif';ctx.textAlign='left';
+  ctx.fillText('堆数组:',40,hArrY+12);
+  for(let i=0;i<heap.length;i++){
+    const hx=120+i*(cellW+gap);
+    let bg='#1a3a5a';
+    if(i===0)bg='#e94560';
+    ctx.fillStyle=bg;ctx.fillRect(hx,hArrY,cellW,28);
+    ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(hx,hArrY,cellW,28);
+    ctx.fillStyle='#eee';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(heap[i],hx+cellW/2,hArrY+18);
+  }
+  // result
+  if(s.final){
+    ctx.fillStyle='#ffd700';ctx.font='bold 24px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`第${k}大元素 = ${heap[0]}`,W/2,H-40);
+  }
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

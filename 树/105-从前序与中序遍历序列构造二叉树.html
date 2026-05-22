@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>105 - 从前序与中序遍历序列构造二叉树</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{color:#e94560;font-size:24px;margin-bottom:10px}
+#canvas{border:1px solid #333;border-radius:8px;background:#16213e}
+.controls{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap;justify-content:center}
+.controls button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:background .2s}
+.controls button:hover{background:#c73a52}
+#stepInfo{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;min-height:80px;margin-top:10px}
+#stepInfo h3{color:#16c79a;margin-bottom:6px}
+#stepInfo p{line-height:1.6}
+.highlight{color:#e94560;font-weight:bold}
+#arrayPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#arrayPanel h3{color:#16c79a;margin-bottom:6px}
+.arr-row{display:flex;gap:4px;align-items:center;margin-bottom:6px}
+.arr-label{color:#888;min-width:80px;font-size:12px}
+.arr-cell{padding:4px 8px;border-radius:4px;font-size:13px;font-weight:bold;min-width:28px;text-align:center}
+.arr-cell.used{background:#555;color:#888}
+.arr-cell.root{background:#e94560;color:#fff}
+.arr-cell.left-range{background:#16c79a33;color:#16c79a}
+.arr-cell.right-range{background:#0f346088;color:#88aaff}
+.arr-cell.normal{background:#0f3460;color:#eee}
+</style>
+</head>
+<body>
+<h1>105 - 从前序与中序遍历序列构造二叉树</h1>
+<canvas id="canvas" width="780" height="420"></canvas>
+<div class="controls">
+<button id="btnReset">⏮ 重置</button>
+<button id="btnPrev">⏪ 步骤后退</button>
+<button id="btnPlay">▶ 播放</button>
+<button id="btnNext">步骤前进 ⏩</button>
+</div>
+<div id="stepInfo"><h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p></div>
+<div id="arrayPanel"><h3>数组状态</h3><div id="arrayDisplay"></div></div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=780,H=420;
+const preorder=[3,9,20,15,7];
+const inorder=[9,3,15,20,7];
+const steps=[];const builtNodes={};const nodePos={};
+let preIdx=0;
+function genSteps(preL,preR,inL,inR,depth){
+  if(preL>preR||inL>inR){steps.push({type:'null',desc:'子树为空，返回 null',preL,preR,inL,inR,depth,built:{...builtNodes}});return null;}
+  const rootVal=preorder[preL];
+  steps.push({type:'pickRoot',val:rootVal,desc:`前序首元素 ${rootVal} 为根节点`,preL,preR,inL,inR,depth,built:{...builtNodes}});
+  let rootIdx=inorder.indexOf(rootVal);
+  const leftSize=rootIdx-inL;
+  steps.push({type:'findInInorder',val:rootVal,desc:`在中序中找到 ${rootVal} 的位置（索引 ${rootIdx}），左边 ${leftSize} 个元素为左子树，右边 ${inR-rootIdx} 个元素为右子树`,preL,preR,inL,inR,depth,rootIdx,leftSize,built:{...builtNodes}});
+  builtNodes[rootVal]={left:null,right:null,depth};
+  steps.push({type:'createNode',val:rootVal,desc:`创建节点 ${rootVal}`,preL,preR,inL,inR,depth,rootIdx,leftSize,built:JSON.parse(JSON.stringify(builtNodes))});
+  const leftNode=genSteps(preL+1,preL+leftSize,inL,rootIdx-1,depth+1);
+  builtNodes[rootVal].left=leftNode?leftNode.val:null;
+  const rightNode=genSteps(preL+leftSize+1,preR,rootIdx+1,inR,depth+1);
+  builtNodes[rootVal].right=rightNode?rightNode.val:null;
+  steps.push({type:'nodeComplete',val:rootVal,desc:`节点 ${rootVal} 构造完成，左子节点=${leftNode?leftNode.val:'null'}，右子节点=${rightNode?rightNode.val:'null'}`,preL,preR,inL,inR,depth,rootIdx,leftSize,built:JSON.parse(JSON.stringify(builtNodes))});
+  return {val:rootVal,left:leftNode,right:rightNode};
+}
+genSteps(0,preorder.length-1,0,inorder.length-1,0);
+function assignPosBuilt(){
+  const entries=Object.entries(builtNodes);
+  const root=entries.find(([v,n])=>n.depth===0);
+  if(!root)return;
+  function assign(val,x,y,spread){
+    if(!val)return;
+    nodePos[val]={x,y};
+    const n=builtNodes[val];
+    if(n.left)assign(n.left,x-spread,y+60,spread/2);
+    if(n.right)assign(n.right,x+spread,y+60,spread/2);
+  }
+  assign(parseInt(root[0]),390,50,150);
+}
+let curStep=-1,playing=false,timer=null;
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  if(!s)return;
+  const b=s.built;
+  assignPosBuilt();
+  // draw edges
+  for(const[val,node]of Object.entries(b)){
+    const p=nodePos[parseInt(val)];
+    if(!p)continue;
+    if(node.left&&nodePos[node.left]){const q=nodePos[node.left];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();}
+    if(node.right&&nodePos[node.right]){const q=nodePos[node.right];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();}
+  }
+  // draw nodes
+  for(const[val,node]of Object.entries(b)){
+    const p=nodePos[parseInt(val)];
+    if(!p)continue;
+    const isCur=s&&s.val&&parseInt(val)===s.val;
+    const isComplete=s.type==='nodeComplete'&&parseInt(val)===s.val;
+    ctx.beginPath();ctx.arc(p.x,p.y,22,0,Math.PI*2);
+    if(isCur){ctx.fillStyle='#e94560';ctx.shadowColor='#e94560';ctx.shadowBlur=15;}
+    else if(isComplete){ctx.fillStyle='#16c79a';ctx.shadowBlur=0;}
+    else{ctx.fillStyle='#0f3460';ctx.shadowBlur=0;}
+    ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle=isCur?'#e94560':isComplete?'#16c79a':'#444';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(val,p.x,p.y);
+  }
+}
+function renderArrays(s){
+  const el=document.getElementById('arrayDisplay');
+  if(!s){el.innerHTML='';return;}
+  function renderArr(arr,label,rootIdx,leftRange,rightRange,usedSet){
+    let html=`<div class="arr-row"><span class="arr-label">${label}</span>`;
+    arr.forEach((v,i)=>{
+      let cls='normal';
+      if(usedSet&&usedSet.has(i))cls='used';
+      if(i===rootIdx)cls='root';
+      else if(leftRange&&i>=leftRange[0]&&i<=leftRange[1])cls='left-range';
+      else if(rightRange&&i>=rightRange[0]&&i<=rightRange[1])cls='right-range';
+      html+=`<span class="arr-cell ${cls}">${v}</span>`;
+    });
+    html+='</div>';return html;
+  }
+  const ri=s.rootIdx!==undefined?s.rootIdx:-1;
+  const lr=s.inL!==undefined&&ri>=0?[s.inL,ri-1]:null;
+  const rr=s.inL!==undefined&&ri>=0?[ri+1,s.inR]:null;
+  el.innerHTML=renderArr(preorder,'前序 preorder',s.preL,null,null)+renderArr(inorder,'中序 inorder',ri,lr,rr);
+}
+function renderUI(){
+  draw();const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  const infoEl=document.getElementById('stepInfo');
+  if(s){const tl={null:'空子树',pickRoot:'选取根',findInInorder:'在中序中定位',createNode:'创建节点',nodeComplete:'节点完成'};
+  infoEl.innerHTML=`<h3>步骤 ${curStep+1} / ${steps.length} — <span class="highlight">${tl[s.type]||s.type}</span></h3><p>${s.desc}</p>`;}
+  else infoEl.innerHTML=`<h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p>`;
+  renderArrays(s);
+}
+function stepForward(){if(curStep<steps.length-1){curStep++;renderUI();}else stopPlay();}
+function stepBack(){if(curStep>=0){curStep--;renderUI();}}
+function resetAnim(){stopPlay();curStep=-1;renderUI();}
+function startPlay(){if(playing)return;playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)stepForward();else stopPlay();},800);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+document.getElementById('btnPlay').onclick=()=>{if(playing)stopPlay();else startPlay();};
+document.getElementById('btnNext').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btnPrev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btnReset').onclick=resetAnim;
+renderUI();
+</script>
+</body>
+</html>

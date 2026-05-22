@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>128 - 最长连续序列</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.header{width:100%;background:linear-gradient(135deg,#16213e,#0f3460);padding:24px 0;text-align:center;border-bottom:2px solid #e94560}
+.header h1{font-size:28px;color:#e94560;margin-bottom:6px}
+.header p{color:#aaa;font-size:14px}
+.example{background:#16213e;border-radius:12px;padding:18px 28px;margin:20px auto;max-width:800px;border:1px solid #333;width:90%}
+.example h3{color:#16c79a;margin-bottom:8px;font-size:16px}
+.example pre{color:#ccc;font-size:14px;line-height:1.6;white-space:pre-wrap}
+.canvas-wrap{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:12px auto;max-width:1100px;width:95%}
+.canvas-box{background:#16213e;border-radius:12px;border:1px solid #333;overflow:hidden;flex:1;min-width:320px;max-width:540px}
+.canvas-box h3{text-align:center;padding:10px;color:#16c79a;font-size:15px;border-bottom:1px solid #333}
+canvas{display:block;margin:0 auto}
+.desc-panel{background:#16213e;border-radius:12px;padding:16px 24px;margin:12px auto;max-width:1100px;width:95%;border:1px solid #333;min-height:60px}
+.desc-panel .step-counter{color:#e94560;font-size:13px;margin-bottom:6px}
+.desc-panel .step-text{color:#eee;font-size:15px;line-height:1.6}
+.controls{display:flex;gap:12px;justify-content:center;margin:16px auto;flex-wrap:wrap}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:8px;padding:10px 22px;font-size:15px;cursor:pointer;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+.controls button:active{transform:scale(.95)}
+.spacer{height:30px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>LeetCode 128 - 最长连续序列</h1>
+  <p>Longest Consecutive Sequence | 哈希集合法</p>
+</div>
+<div class="example">
+  <h3>示例</h3>
+  <pre>输入：nums = [100,4,200,1,3,2]
+输出：4
+解释：最长连续序列是 [1,2,3,4]，长度为 4</pre>
+</div>
+<div class="canvas-wrap">
+  <div class="canvas-box">
+    <h3>原始数组</h3>
+    <canvas id="arrayCanvas" width="500" height="140"></canvas>
+  </div>
+  <div class="canvas-box">
+    <h3>哈希集合</h3>
+    <canvas id="setCanvas" width="500" height="300"></canvas>
+  </div>
+</div>
+<div class="canvas-box" style="background:#16213e;border-radius:12px;border:1px solid #333;margin:12px auto;max-width:1100px;width:95%">
+  <h3 style="text-align:center;padding:10px;color:#16c79a;font-size:15px;border-bottom:1px solid #333">序列扫描</h3>
+  <canvas id="seqCanvas" width="1060" height="160"></canvas>
+</div>
+<div class="desc-panel">
+  <div class="step-counter" id="stepCounter">步骤 0 / 0</div>
+  <div class="step-text" id="stepText">点击「播放」或「步骤前进」开始动画</div>
+</div>
+<div class="controls">
+  <button onclick="reset()">⏮ 重置</button>
+  <button onclick="prevStep()">◀ 步骤后退</button>
+  <button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+  <button onclick="nextStep()">步骤前进 ▶</button>
+</div>
+<div class="spacer"></div>
+
+<script>
+const nums=[100,4,200,1,3,2];
+const arrCtx=document.getElementById('arrayCanvas').getContext('2d');
+const setCtx=document.getElementById('setCanvas').getContext('2d');
+const seqCtx=document.getElementById('seqCanvas').getContext('2d');
+const C={bg:'#1a1a2e',card:'#16213e',accent:'#e94560',hi:'#16c79a',text:'#eee',dim:'#555',found:'#ffdd57'};
+
+function genSteps(){
+  const steps=[];
+  const numSet=new Set();
+  steps.push({desc:'初始状态：将所有数字加入哈希集合，然后扫描寻找序列起点',phase:'init',set:new Set(),curVal:null,seqStart:null,curSeq:[],longest:[],scanning:false});
+
+  // Phase 1: add to set
+  for(let i=0;i<nums.length;i++){
+    numSet.add(nums[i]);
+    steps.push({desc:`将 nums[${i}] = ${nums[i]} 加入哈希集合`,phase:'add',set:new Set(numSet),curVal:nums[i],seqStart:null,curSeq:[],longest:[],scanning:false});
+  }
+
+  // Phase 2: scan for sequences
+  let longest=[];
+  const sorted=[...numSet].sort((a,b)=>a-b);
+  for(const num of sorted){
+    if(!numSet.has(num-1)){ // num is a sequence start
+      let cur=[num],c=num+1;
+      const addSeqSteps=(n,seq)=>{
+        steps.push({desc:`发现序列起点 ${n}，开始向右扩展`,phase:'scan',set:new Set(numSet),curVal:n,seqStart:n,curSeq:[...seq],longest:[...longest],scanning:true});
+      };
+      addSeqSteps(num,cur);
+      while(numSet.has(c)){
+        cur.push(c);
+        steps.push({desc:`${c} 在集合中，序列扩展为 [${cur.join(',')}]`,phase:'expand',set:new Set(numSet),curVal:c,seqStart:num,curSeq:[...cur],longest:[...longest],scanning:true});
+        c++;
+      }
+      if(cur.length>longest.length) longest=[...cur];
+      steps.push({desc:`序列 [${cur.join(',')}] 结束，当前最长序列长度 = ${longest.length}`,phase:'endseq',set:new Set(numSet),curVal:null,seqStart:num,curSeq:[...cur],longest:[...longest],scanning:true});
+    }
+  }
+  steps.push({desc:`扫描完成，最长连续序列为 [${longest.join(',')}]，长度 = ${longest.length}`,phase:'done',set:new Set(numSet),curVal:null,seqStart:null,curSeq:[],longest:[...longest],scanning:true});
+  return steps;
+}
+
+let steps=genSteps(),curStep=0,playing=false,timer=null;
+
+function rr(ctx,x,y,w,h,r,f,s){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();if(f)ctx.fill();if(s)ctx.stroke();}
+
+function drawArray(step){
+  const ctx=arrCtx;ctx.clearRect(0,0,500,140);
+  const n=nums.length,cw=62,gap=8,tw=n*cw+(n-1)*gap,sx=(500-tw)/2,sy=24,ch=56;
+  for(let i=0;i<n;i++){
+    const x=sx+i*(cw+gap);
+    const isCur=step.curVal===nums[i]&&step.phase==='add';
+    ctx.fillStyle=isCur?C.accent:C.card;ctx.strokeStyle=isCur?C.accent:C.dim;ctx.lineWidth=isCur?3:1;
+    rr(ctx,x,sy,cw,ch,8,true,true);
+    ctx.fillStyle=isCur?'#fff':C.text;ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(nums[i],x+cw/2,sy+ch/2);
+    ctx.fillStyle=C.dim;ctx.font='12px sans-serif';ctx.fillText(`[${i}]`,x+cw/2,sy+ch+14);
+  }
+}
+
+function drawSet(step){
+  const ctx=setCtx;ctx.clearRect(0,0,500,300);
+  const items=[...step.set].sort((a,b)=>a-b);
+  if(!items.length){ctx.fillStyle=C.dim;ctx.font='15px sans-serif';ctx.textAlign='center';ctx.fillText('（空）',250,150);return;}
+  const cols=6,cw=62,ch=40,gap=8,padX=20,padY=40;
+  items.forEach((v,i)=>{
+    const col=i%cols,row=Math.floor(i/cols);
+    const x=padX+col*(cw+gap),y=padY+row*(ch+gap);
+    const isCur=step.curVal===v;
+    const inSeq=step.scanning&&step.curSeq.includes(v);
+    const inLongest=step.longest.includes(v)&&step.phase!=='add';
+    ctx.fillStyle=inLongest?C.found:inSeq?C.hi:isCur?C.accent:C.card;
+    ctx.strokeStyle=inLongest?'#ffdd57':inSeq?C.hi:isCur?C.accent:C.dim;
+    ctx.lineWidth=isCur||inSeq||inLongest?3:1;
+    rr(ctx,x,y,cw,ch,6,true,true);
+    ctx.fillStyle=inLongest||inSeq?'#1a1a2e':C.text;ctx.font='bold 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(v,x+cw/2,y+ch/2);
+  });
+}
+
+function drawSeq(step){
+  const ctx=seqCtx;ctx.clearRect(0,0,1060,160);
+  if(!step.scanning||!step.curSeq.length)return;
+  const seq=step.curSeq,cw=60,ch=50,gap=6,tw=seq.length*(cw+gap),sx=(1060-tw)/2,sy=30;
+  ctx.fillStyle=C.hi;ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+  ctx.fillText(`当前序列（起点 ${step.seqStart}）`,1060/2,16);
+  seq.forEach((v,i)=>{
+    const x=sx+i*(cw+gap);
+    const isEnd=step.phase==='endseq';
+    const isLongest=step.longest.includes(v)&&(step.phase==='endseq'||step.phase==='done');
+    ctx.fillStyle=isLongest?C.found:i===seq.length-1&&step.phase==='expand'?C.hi:C.card;
+    ctx.strokeStyle=isLongest?'#ffdd57':C.hi;ctx.lineWidth=2;
+    rr(ctx,x,sy,cw,ch,8,true,true);
+    ctx.fillStyle=isLongest?'#1a1a2e':C.text;ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(v,x+cw/2,sy+ch/2);
+  });
+  if(step.longest.length){
+    ctx.fillStyle=C.found;ctx.font='14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`最长序列长度: ${step.longest.length}`,1060/2,sy+ch+24);
+  }
+}
+
+function render(){
+  const step=steps[curStep];
+  drawArray(step);drawSet(step);drawSeq(step);
+  document.getElementById('stepCounter').textContent=`步骤 ${curStep} / ${steps.length-1}`;
+  document.getElementById('stepText').textContent=step.desc;
+}
+
+function reset(){stopPlay();curStep=0;render();}
+function nextStep(){if(curStep<steps.length-1){curStep++;render();}else stopPlay();}
+function prevStep(){if(curStep>0){curStep--;render();}}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)nextStep();else stopPlay();},1000);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+render();
+</script>
+</body>
+</html>

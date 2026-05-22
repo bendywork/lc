@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>73 - 矩阵置零</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>73 - 矩阵置零</h1>
+<p id="desc">给定矩阵，若某元素为0，则将其所在行和列全部设为0。第一遍扫描标记含0的行和列，第二遍根据标记置零。</p>
+<canvas id="cv" width="900" height="520"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="600" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#e94560"></span>发现0</span>
+<span><span class="dot" style="background:#1a8fdd"></span>标记行</span>
+<span><span class="dot" style="background:#16c79a"></span>标记列</span>
+<span><span class="dot" style="background:#ffd700"></span>置零</span>
+<span><span class="dot" style="background:#16c79a"></span>当前扫描</span>
+</div>
+<script>
+const orig=[[1,1,1],[1,0,1],[1,1,1]];
+const m=orig.length,n=orig[0].length;
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const mat=orig.map(r=>[...r]);
+  const rowSet=new Set(),colSet=new Set();
+  steps.push({mat:mat.map(r=>[...r]),rowSet:new Set(),colSet:new Set(),phase:'init',curI:-1,curJ:-1,desc:'初始化：准备扫描矩阵标记含0的行和列'});
+  // phase 1: scan
+  steps.push({mat:mat.map(r=>[...r]),rowSet:new Set(),colSet:new Set(),phase:'scan-start',curI:-1,curJ:-1,desc:'阶段1：扫描矩阵，记录含0的行和列'});
+  for(let i=0;i<m;i++){
+    for(let j=0;j<n;j++){
+      if(mat[i][j]===0){
+        rowSet.add(i);colSet.add(j);
+        steps.push({mat:mat.map(r=>[...r]),rowSet:new Set(rowSet),colSet:new Set(colSet),phase:'found-zero',curI:i,curJ:j,desc:`发现0: mat[${i}][${j}]=0，标记行${i}和列${j}`});
+      }else{
+        steps.push({mat:mat.map(r=>[...r]),rowSet:new Set(rowSet),colSet:new Set(colSet),phase:'scan',curI:i,curJ:j,desc:`扫描: mat[${i}][${j}]=${mat[i][j]}，非零继续`});
+      }
+    }
+  }
+  // phase 2: set zeros
+  steps.push({mat:mat.map(r=>[...r]),rowSet:new Set(rowSet),colSet:new Set(colSet),phase:'setzero-start',curI:-1,curJ:-1,desc:`阶段2：根据标记置零，标记行={${[...rowSet]}}，标记列={${[...colSet]}}`});
+  for(let i=0;i<m;i++){
+    for(let j=0;j<n;j++){
+      if(rowSet.has(i)||colSet.has(j)){
+        mat[i][j]=0;
+        steps.push({mat:mat.map(r=>[...r]),rowSet:new Set(rowSet),colSet:new Set(colSet),phase:'setzero',curI:i,curJ:j,desc:`置零: mat[${i}][${j}] ${rowSet.has(i)?'(行'+i+'含0)':'(列'+j+'含0)'} → 0`});
+      }
+    }
+  }
+  steps.push({mat:mat.map(r=>[...r]),rowSet:new Set(rowSet),colSet:new Set(colSet),phase:'done',curI:-1,curJ:-1,desc:'置零完成！',final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=80,cellH=60,gap=6;
+const gridW=n*(cellW+gap)-gap;
+const gridH=m*(cellH+gap)-gap;
+const gx=(W-gridW)/2,gy=80;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{mat:orig.map(r=>[...r]),rowSet:new Set(),colSet:new Set(),phase:'init',curI:-1,curJ:-1}:steps[cur];
+  // draw row/col markers
+  ctx.fillStyle='#aaa';ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+  for(let j=0;j<n;j++){
+    const x=gx+j*(cellW+gap)+cellW/2;
+    ctx.fillStyle=s.colSet.has(j)?'#16c79a':'#555';
+    ctx.fillText(s.colSet.has(j)?'列'+j+'★':'列'+j,x,gy-15);
+  }
+  for(let i=0;i<m;i++){
+    const y=gy+i*(cellH+gap)+cellH/2;
+    ctx.fillStyle=s.rowSet.has(i)?'#1a8fdd':'#555';
+    ctx.textAlign='right';
+    ctx.fillText(s.rowSet.has(i)?'行'+i+'★':'行'+i,gx-10,y+4);
+  }
+  // draw cells
+  for(let i=0;i<m;i++){
+    for(let j=0;j<n;j++){
+      const x=gx+j*(cellW+gap);
+      const y=gy+i*(cellH+gap);
+      let bg='#2a2a4a';
+      if(s.phase==='found-zero'&&s.curI===i&&s.curJ===j)bg='#e94560';
+      if(s.phase==='scan'&&s.curI===i&&s.curJ===j)bg='#16c79a';
+      if(s.phase==='setzero'&&s.curI===i&&s.curJ===j)bg='#ffd700';
+      if(s.phase==='done'&&s.mat[i][j]===0)bg='#ffd700';
+      // highlight marked row/col
+      if(s.rowSet.has(i)&&s.colSet.has(j)&&s.phase==='setzero-start')bg='#4a2a2a';
+      ctx.fillStyle=bg;
+      ctx.fillRect(x,y,cellW,cellH);
+      ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,y,cellW,cellH);
+      ctx.fillStyle=s.mat[i][j]===0?'#ffd700':'#eee';ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+      ctx.fillText(s.mat[i][j],x+cellW/2,y+cellH/2+7);
+    }
+  }
+  // phase label
+  let phaseLabel='';
+  if(s.phase==='init')phaseLabel='初始矩阵';
+  else if(s.phase.startsWith('scan'))phaseLabel='阶段1: 扫描标记';
+  else if(s.phase==='found-zero')phaseLabel='阶段1: 发现0!';
+  else if(s.phase==='setzero-start')phaseLabel='阶段2: 开始置零';
+  else if(s.phase==='setzero')phaseLabel='阶段2: 置零中';
+  else if(s.phase==='done')phaseLabel='置零完成!';
+  ctx.fillStyle='#e94560';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+  ctx.fillText(phaseLabel,W/2,H-30);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

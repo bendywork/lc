@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>53 - 最大子数组和 (Kadane算法)</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:1.6rem;margin-bottom:8px}
+.subtitle{color:#16c79a;font-size:.95rem;margin-bottom:16px}
+#canvas-wrap{background:#16213e;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+canvas{display:block}
+#desc-panel{background:#16213e;border-radius:10px;padding:14px 20px;width:800px;margin-bottom:12px;min-height:70px;border-left:4px solid #e94560}
+#desc-panel .step-num{color:#16c79a;font-weight:bold;font-size:1.1rem}
+#desc-panel .formula{color:#e94560;font-family:'Courier New',monospace;font-size:1rem;margin-top:6px}
+#desc-panel .explain{color:#b0b0b0;margin-top:4px;font-size:.9rem}
+#controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+button{background:#0f3460;color:#e0e0e0;border:2px solid #e94560;border-radius:8px;padding:8px 18px;font-size:1rem;cursor:pointer;transition:all .2s}
+button:hover{background:#e94560;color:#fff}
+button:active{transform:scale(.95)}
+button.active{background:#e94560;color:#fff}
+#speed-label{color:#16c79a;font-size:.9rem}
+#speed{width:80px;accent-color:#e94560}
+.legend{display:flex;gap:16px;margin-top:10px;font-size:.85rem;flex-wrap:wrap;justify-content:center}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend .dot{width:14px;height:14px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>LeetCode 53 - 最大子数组和</h1>
+<p class="subtitle">Kadane 算法 · 动态规划</p>
+<div id="canvas-wrap"><canvas id="cv" width="800" height="420"></canvas></div>
+<div id="desc-panel">
+  <div class="step-num">步骤 0 / 0</div>
+  <div class="formula"></div>
+  <div class="explain">点击 ▶ 或步骤按钮开始动画</div>
+</div>
+<div id="controls">
+  <button id="btn-reset" title="重置">⏮ 重置</button>
+  <button id="btn-prev" title="步骤后退">◀ 上一步</button>
+  <button id="btn-play" title="播放/暂停">▶ 播放</button>
+  <button id="btn-next" title="步骤前进">▶ 下一步</button>
+  <span id="speed-label">速度</span>
+  <input type="range" id="speed" min="1" max="10" value="4">
+</div>
+<div class="legend">
+  <span><span class="dot" style="background:#16c79a"></span>当前子数组</span>
+  <span><span class="dot" style="background:#e94560"></span>最大子数组</span>
+  <span><span class="dot" style="background:#533483"></span>已舍弃</span>
+  <span><span class="dot" style="background:#0f3460"></span>未处理</span>
+</div>
+<script>
+const nums=[-2,1,-3,4,-1,2,1,-5,4];
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=800,H=420;
+const cellW=72,cellH=52,gap=6,startX=50,startY=60;
+const arrY=55,dpY=180,barY=280;
+
+let steps=[],curStep=-1,playing=false,playTimer=null;
+const speedEl=document.getElementById('speed');
+
+function buildSteps(){
+  steps=[];
+  let cur=nums[0],max=nums[0],curS=0,curE=0,maxS=0,maxE=0;
+  steps.push({i:0,cur,max,curS,curE,maxS,maxE,desc:'初始化',formula:'cur_sum = max_sum = nums[0] = '+nums[0]});
+  for(let i=1;i<nums.length;i++){
+    let oldCur=cur,oldS=curS;
+    if(cur+nums[i]>nums[i]){
+      cur=cur+nums[i];curE=i;
+      steps.push({i,cur,max,curS,curE,maxS,maxE,desc:'累加当前元素',formula:`cur_sum = cur_sum + nums[${i}] = ${oldCur} + ${nums[i]} = ${cur}`});
+    }else{
+      cur=nums[i];curS=i;curE=i;
+      steps.push({i,cur,max,curS,curE,maxS,maxE,desc:'舍弃前段，重新开始',formula:`cur_sum = nums[${i}] = ${nums[i]}（因为 ${oldCur}+${nums[i]} ≤ ${nums[i]}）`});
+    }
+    if(cur>max){max=cur;maxS=curS;maxE=curE;}
+    steps.push({i,cur,max,curS,curE,maxS,maxE,desc:cur===max&&curS===maxS?'更新最大子数组和':'保持最大子数组和',formula:`max_sum = max(${cur>max?cur:max === oldMax => max : max}, ${cur}) = ${max}`});
+  }
+  // fix formula for max update steps
+  let maxTrack=nums[0];
+  for(let s of steps){
+    if(s.desc==='更新最大子数组和'){
+      s.formula=`max_sum = max(max_sum, cur_sum) = ${s.max}`;
+    }else if(s.desc==='保持最大子数组和'){
+      s.formula=`max_sum = max(${s.max}, ${s.cur}) = ${s.max}（不变）`;
+    }
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // title
+  ctx.fillStyle='#e0e0e0';ctx.font='bold 16px sans-serif';
+  ctx.fillText('数组 nums[]',startX,arrY-20);
+  ctx.fillText('数值变化',startX,dpY-20);
+
+  const s=curStep>=0?steps[curStep]:null;
+  const idx=s?s.i:-1;
+
+  // draw array cells
+  for(let i=0;i<nums.length;i++){
+    const x=startX+i*(cellW+gap),y=arrY;
+    let bg='#0f3460';
+    if(s){
+      if(i>=s.curS&&i<=s.curE) bg='#16c79a33';
+      if(i>=s.maxS&&i<=s.maxE) bg='#e9456044';
+      if(i<s.curS||(s.curS===s.curE&&i===s.curS&&i===idx)){}
+      if(i>idx) bg='#0f346088';
+      if(i>=s.curS&&i<=s.curE) bg='#16c79a55';
+      if(i>=s.maxS&&i<=s.maxE){
+        if(i>=s.curS&&i<=s.curE) bg='#e9456088';
+        else bg='#e9456044';
+      }
+      if(i>s.i) bg='#0f346066';
+      if(i<s.curS) bg='#53348366';
+    }
+    ctx.fillStyle=bg;
+    ctx.beginPath();ctx.roundRect(x,y,cellW,cellH,6);ctx.fill();
+    ctx.strokeStyle=i===idx?'#16c79a':'#333';ctx.lineWidth=i===idx?2.5:1;ctx.stroke();
+    ctx.fillStyle=i===idx?'#16c79a':'#e0e0e0';ctx.font='bold 20px sans-serif';
+    ctx.textAlign='center';ctx.fillText(nums[i],x+cellW/2,y+cellH/2+7);
+    ctx.fillStyle='#888';ctx.font='12px sans-serif';ctx.fillText(i,x+cellW/2,y+cellH+14);
+  }
+
+  if(!s)return;
+  // cur_sum & max_sum display
+  ctx.textAlign='left';
+  ctx.fillStyle='#16c79a';ctx.font='bold 18px sans-serif';
+  ctx.fillText(`cur_sum = ${s.cur}`,startX,dpY);
+  ctx.fillStyle='#e94560';
+  ctx.fillText(`max_sum = ${s.max}`,startX+260,dpY);
+
+  // current subarray bracket
+  ctx.strokeStyle='#16c79a';ctx.lineWidth=2;
+  const bx1=startX+s.curS*(cellW+gap),bx2=startX+s.curE*(cellW+gap)+cellW;
+  ctx.beginPath();ctx.moveTo(bx1,arrY+cellH+22);ctx.lineTo(bx1,arrY+cellH+28);ctx.lineTo(bx2,arrY+cellH+28);ctx.lineTo(bx2,arrY+cellH+22);ctx.stroke();
+  ctx.fillStyle='#16c79a';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText('当前子数组',(bx1+bx2)/2,arrY+cellH+42);
+
+  // max subarray bracket
+  ctx.strokeStyle='#e94560';ctx.lineWidth=2;
+  const mx1=startX+s.maxS*(cellW+gap),mx2=startX+s.maxE*(cellW+gap)+cellW;
+  ctx.beginPath();ctx.moveTo(mx1,arrY+cellH+50);ctx.lineTo(mx1,arrY+cellH+56);ctx.lineTo(mx2,arrY+cellH+56);ctx.lineTo(mx2,arrY+cellH+50);ctx.stroke();
+  ctx.fillStyle='#e94560';ctx.font='12px sans-serif';
+  ctx.fillText('最大子数组',(mx1+mx2)/2,arrY+cellH+70);
+
+  // bar chart for cur and max
+  ctx.fillStyle='#e0e0e0';ctx.font='14px sans-serif';ctx.textAlign='left';
+  ctx.fillText('cur_sum',startX,barY-5);
+  ctx.fillText('max_sum',startX,barY+55);
+  const barMax=20,barH=35,barStartX=startX+90;
+  const curW=Math.max(0,s.cur/barMax*580),maxW=Math.max(0,s.max/barMax*580);
+  ctx.fillStyle='#16c79a44';ctx.fillRect(barStartX,barY-20,curW>0?curW:2,barH);
+  ctx.strokeStyle='#16c79a';ctx.lineWidth=2;ctx.strokeRect(barStartX,barY-20,curW>0?curW:2,barH);
+  ctx.fillStyle='#e9456044';ctx.fillRect(barStartX,barY+30,maxW>0?maxW:2,barH);
+  ctx.strokeStyle='#e94560';ctx.lineWidth=2;ctx.strokeRect(barStartX,barY+30,maxW>0?maxW:2,barH);
+  ctx.fillStyle='#16c79a';ctx.font='bold 14px sans-serif';ctx.textAlign='left';
+  ctx.fillText(s.cur,barStartX+curW+6,barY);
+  ctx.fillStyle='#e94560';ctx.fillText(s.max,barStartX+maxW+6,barY+55);
+}
+
+function updateDesc(){
+  const panel=document.getElementById('desc-panel');
+  if(curStep<0){
+    panel.innerHTML=`<div class="step-num">步骤 0 / ${steps.length}</div><div class="explain">点击 ▶ 或步骤按钮开始动画</div>`;
+    return;
+  }
+  const s=steps[curStep];
+  panel.innerHTML=`<div class="step-num">步骤 ${curStep+1} / ${steps.length}</div><div class="formula">${s.formula}</div><div class="explain">i=${s.i} · ${s.desc}</div>`;
+}
+
+function stepForward(){
+  if(curStep<steps.length-1){curStep++;draw();updateDesc();}
+  else{stopPlay();}
+}
+function stepBack(){
+  if(curStep>0){curStep--;draw();updateDesc();}
+  else if(curStep===0){curStep=-1;draw();updateDesc();}
+}
+function startPlay(){
+  if(playing)return;
+  if(curStep>=steps.length-1)curStep=-1;
+  playing=true;
+  document.getElementById('btn-play').textContent='⏸ 暂停';
+  tick();
+}
+function tick(){
+  if(!playing)return;
+  stepForward();
+  if(curStep>=steps.length-1){stopPlay();return;}
+  playTimer=setTimeout(tick,1200/speedEl.value);
+}
+function stopPlay(){
+  playing=false;clearTimeout(playTimer);
+  document.getElementById('btn-play').textContent='▶ 播放';
+}
+function reset(){stopPlay();curStep=-1;draw();updateDesc();}
+
+document.getElementById('btn-play').onclick=()=>playing?stopPlay():startPlay();
+document.getElementById('btn-next').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btn-prev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btn-reset').onclick=reset;
+
+buildSteps();draw();updateDesc();
+</script>
+</body>
+</html>

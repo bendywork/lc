@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>394-字符串解码</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:320px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.string-row{display:flex;gap:2px;margin:12px 0;justify-content:center;flex-wrap:wrap}
+.s-char{width:28px;height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;font-family:monospace;background:#0f3460;border:2px solid #333;transition:all .3s}
+.s-char.current{border-color:#e94560;color:#e94560;background:#e9456022}
+.s-char.processed{border-color:#16c79a;color:#16c79a;background:#16c79a22}
+.s-char.pending{color:#555}
+.s-char.digit{background:#e9456011;border-color:#e9456044}
+.stack-display{margin:12px 0;min-height:200px}
+.stack-level{display:flex;align-items:center;gap:8px;margin:4px 0;padding:6px;border-radius:6px;background:#0f3460;animation:slideIn .3s ease}
+.stack-level.current{border-left:3px solid #e94560}
+@keyframes slideIn{from{transform:translateX(-20px);opacity:0}to{transform:translateX(0);opacity:1}}
+.stack-depth{color:#aaa;font-size:11px;min-width:50px}
+.stack-str{color:#16c79a;font-family:monospace;font-size:14px;background:#16c79a11;padding:2px 8px;border-radius:4px}
+.stack-num{color:#e94560;font-family:monospace;font-size:14px;background:#e9456011;padding:2px 8px;border-radius:4px}
+.result-area{margin-top:12px;padding:10px;background:#0f3460;border-radius:8px;font-family:monospace;font-size:14px;color:#16c79a;min-height:30px;word-break:break-all}
+.expand-anim{margin-top:12px;padding:10px;background:#0f3460;border-radius:8px;font-size:13px;color:#aaa;min-height:40px}
+.expand-anim .before{color:#e94560}.expand-anim .after{color:#16c79a;font-weight:bold}
+</style>
+</head>
+<body>
+<h1>394 - 字符串解码</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">输入字符串</div>
+<div style="color:#aaa;font-size:13px">s = "3[a2[c]]"</div>
+<div class="string-row" id="stringRow"></div>
+<div style="margin-top:12px"><div style="color:#aaa;font-size:13px;margin-bottom:4px">当前结果:</div><div class="result-area" id="resultArea">-</div></div>
+<div class="expand-anim" id="expandAnim"></div>
+</div>
+<div class="panel">
+<div class="panel-title">栈状态</div>
+<div style="color:#aaa;font-size:12px;margin-bottom:8px">栈存储 [重复次数, 当前字符串] 对</div>
+<div class="stack-display" id="stackDisplay">
+<div style="color:#555;font-size:14px;text-align:center">空栈</div>
+</div>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const S="3[a2[c]]";
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function buildStringRow(idx){
+  const row=document.getElementById('stringRow');row.innerHTML='';
+  S.split('').forEach((ch,i)=>{
+    const cls=i<idx?'processed':i===idx?'current':'pending';
+    const extra=ch>='0'&&ch<='9'?' digit':'';
+    row.innerHTML+=`<div class="s-char ${cls}${extra}">${ch}</div>`;
+  });
+}
+
+function buildStackDisplay(stackFrames,curStr,curNum){
+  const sd=document.getElementById('stackDisplay');sd.innerHTML='';
+  if(stackFrames.length===0&&curStr===''&&curNum===0){
+    sd.innerHTML='<div style="color:#555;font-size:14px;text-align:center">空栈</div>';return;
+  }
+  // Show current working context
+  sd.innerHTML+=`<div class="stack-level current"><span class="stack-depth">当前层</span><span class="stack-num">num=${curNum}</span><span class="stack-str">str="${curStr}"</span></div>`;
+  stackFrames.slice().reverse().forEach((frame,i)=>{
+    const depth=stackFrames.length-i;
+    sd.innerHTML+=`<div class="stack-level"><span class="stack-depth">栈层${depth}</span><span class="stack-num">num=${frame.num}</span><span class="stack-str">str="${frame.str}"</span></div>`;
+  });
+}
+
+function generateSteps(){
+  steps=[];
+  const stack=[];
+  let curNum=0;let curStr='';
+  steps.push({type:'start',stack:[],curNum:0,curStr:'',idx:-1,result:'',
+    desc:`开始解码，s="${S}"`});
+
+  for(let i=0;i<S.length;i++){
+    const ch=S[i];
+    if(ch>='0'&&ch<='9'){
+      curNum=curNum*10+parseInt(ch);
+      steps.push({type:'digit',stack:stack.map(f=>({...f})),curNum,curStr,idx:i,result:curStr,
+        desc:`s[${i}]='${ch}' 是数字，当前 num = ${curNum}`});
+    }else if(ch==='['){
+      stack.push({num:curNum,str:curStr});
+      steps.push({type:'open_bracket',stack:stack.map(f=>({...f})),curNum,curStr:'',idx:i,result:'',
+        desc:`遇到 '['，将 (num=${curNum}, str="${curStr}") 入栈，重置当前层`});
+      curNum=0;curStr='';
+    }else if(ch===']'){
+      const frame=stack.pop();
+      const expanded=frame.str+curStr.repeat(frame.num);
+      steps.push({type:'close_bracket',stack:stack.map(f=>({...f})),curNum:frame.num,curStr,idx:i,result:expanded,
+        beforeStr:frame.str,repeatStr:curStr,repeatNum:frame.num,
+        desc:`遇到 ']'，出栈 (num=${frame.num}, str="${frame.str}")，展开 "${frame.str}" + "${curStr}"×${frame.num} = "${expanded}"`});
+      curStr=expanded;curNum=0;
+    }else{
+      curStr+=ch;
+      steps.push({type:'letter',stack:stack.map(f=>({...f})),curNum,curStr,idx:i,result:curStr,
+        desc:`s[${i}]='${ch}' 是字母，追加到当前字符串 → "${curStr}"`});
+    }
+  }
+  steps.push({type:'done',stack:[],curNum:0,curStr,idx:S.length,result:curStr,
+    desc:`解码完成，结果 = "${curStr}"`});
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildStringRow(step.idx);
+  buildStackDisplay(step.stack,step.curStr||'',step.curNum||0);
+  document.getElementById('resultArea').textContent=step.result||'-';
+  const ea=document.getElementById('expandAnim');
+  if(step.type==='close_bracket'){
+    ea.innerHTML=`展开: <span class="before">"${step.beforeStr}"</span> + <span class="after">"${step.repeatStr}" × ${step.repeatNum}</span> = <span class="after">"${step.result}"</span>`;
+  }else{ea.innerHTML='';}
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},800);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  buildStringRow(-1);buildStackDisplay([],0,'');
+  document.getElementById('resultArea').textContent='-';
+  document.getElementById('expandAnim').innerHTML='';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){currentStep--;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildStringRow(-1);buildStackDisplay([],0,'');
+</script>
+</body>
+</html>

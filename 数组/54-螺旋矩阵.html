@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>54 - 螺旋矩阵</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>54 - 螺旋矩阵</h1>
+<p id="desc">给定m×n矩阵，按螺旋顺序返回所有元素。维护四个边界(top/bottom/left/right)，依次向右→向下→向左→向上遍历，每完成一个方向收缩边界。</p>
+<canvas id="cv" width="900" height="520"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="600" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#16c79a"></span>当前元素</span>
+<span><span class="dot" style="background:#0f3460"></span>已访问</span>
+<span><span class="dot" style="background:#e94560"></span>边界</span>
+<span><span class="dot" style="background:#1a8fdd"></span>方向→</span>
+</div>
+<script>
+const matrix=[[1,2,3,4],[5,6,7,8],[9,10,11,12]];
+const m=matrix.length,n=matrix[0].length;
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  let top=0,bottom=m-1,left=0,right=n-1;
+  const visited=new Set();
+  const res=[];
+  const dirs=['右','下','左','上'];
+  let dirIdx=0;
+  steps.push({top,bottom,left,right,curI:-1,curJ:-1,res:[],visited:new Set(),dir:dirs[0],desc:'初始化：边界 top=0, bottom='+(m-1)+', left=0, right='+(n-1)});
+  while(top<=bottom&&left<=right){
+    // right
+    for(let j=left;j<=right;j++){
+      visited.add(top+','+j);res.push(matrix[top][j]);
+      steps.push({top,bottom,left,right,curI:top,curJ:j,res:[...res],visited:new Set(visited),dir:'右',desc:`向右: matrix[${top}][${j}]=${matrix[top][j]}，res=[${res.join(',')}]`});
+    }
+    top++;
+    // down
+    if(top<=bottom){
+      for(let i=top;i<=bottom;i++){
+        visited.add(i+','+right);res.push(matrix[i][right]);
+        steps.push({top,bottom,left,right,curI:i,curJ:right,res:[...res],visited:new Set(visited),dir:'下',desc:`向下: matrix[${i}][${right}]=${matrix[i][right]}，top收缩→${top}`});
+      }
+      right--;
+    }
+    // left
+    if(top<=bottom&&left<=right){
+      for(let j=right;j>=left;j--){
+        visited.add(bottom+','+j);res.push(matrix[bottom][j]);
+        steps.push({top,bottom,left,right,curI:bottom,curJ:j,res:[...res],visited:new Set(visited),dir:'左',desc:`向左: matrix[${bottom}][${j}]=${matrix[bottom][j]}，right收缩→${right}`});
+      }
+      bottom--;
+    }
+    // up
+    if(top<=bottom&&left<=right){
+      for(let i=bottom;i>=top;i--){
+        visited.add(i+','+left);res.push(matrix[i][left]);
+        steps.push({top,bottom,left,right,curI:i,curJ:left,res:[...res],visited:new Set(visited),dir:'上',desc:`向上: matrix[${i}][${left}]=${matrix[i][left]}，bottom收缩→${bottom}`});
+      }
+      left++;
+    }
+  }
+  steps.push({top,bottom,left,right,curI:-1,curJ:-1,res:[...res],visited:new Set(visited),dir:'完成',desc:`遍历结束！螺旋顺序 = [${res.join(', ')}]`,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=80,cellH=60,gapX=6,gapY=6;
+const gridW=n*(cellW+gapX)-gapX;
+const gridH=m*(cellH+gapY)-gapY;
+const gx=(W-gridW)/2,gy=60;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{top:0,bottom:m-1,left:0,right:n-1,curI:-1,curJ:-1,res:[],visited:new Set(),dir:'-'}:steps[cur];
+  // draw boundary indicators
+  const bPad=8;
+  ctx.strokeStyle='#e94560';ctx.lineWidth=3;ctx.setLineDash([6,3]);
+  // top boundary
+  ctx.beginPath();ctx.moveTo(gx-bPad,gy-bPad+(s.top)*(cellH+gapY));ctx.lineTo(gx+gridW+bPad,gy-bPad+(s.top)*(cellH+gapY));ctx.stroke();
+  // bottom
+  ctx.beginPath();ctx.moveTo(gx-bPad,gy+(s.bottom+1)*(cellH+gapY)-gapY+bPad);ctx.lineTo(gx+gridW+bPad,gy+(s.bottom+1)*(cellH+gapY)-gapY+bPad);ctx.stroke();
+  // left
+  ctx.beginPath();ctx.moveTo(gx-bPad+(s.left)*(cellW+gapX),gy-bPad);ctx.lineTo(gx-bPad+(s.left)*(cellW+gapX),gy+gridH+bPad);ctx.stroke();
+  // right
+  ctx.beginPath();ctx.moveTo(gx+(s.right+1)*(cellW+gapX)-gapX+bPad,gy-bPad);ctx.lineTo(gx+(s.right+1)*(cellW+gapX)-gapX+bPad,gy+gridH+bPad);ctx.stroke();
+  ctx.setLineDash([]);
+
+  // draw cells
+  for(let i=0;i<m;i++){
+    for(let j=0;j<n;j++){
+      const x=gx+j*(cellW+gapX);
+      const y=gy+i*(cellH+gapY);
+      let bg='#2a2a4a';
+      if(s.visited.has(i+','+j))bg='#0f3460';
+      if(s.curI===i&&s.curJ===j)bg='#16c79a';
+      if(s.final)bg='#4a4a2a';
+      ctx.fillStyle=bg;
+      ctx.fillRect(x,y,cellW,cellH);
+      ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,y,cellW,cellH);
+      ctx.fillStyle='#eee';ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+      ctx.fillText(matrix[i][j],x+cellW/2,y+cellH/2+6);
+    }
+  }
+  // boundary labels
+  ctx.fillStyle='#e94560';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText('top='+s.top,gx-30,gy+s.top*(cellH+gapY)+cellH/2);
+  ctx.fillText('bottom='+s.bottom,gx-30,gy+s.bottom*(cellH+gapY)+cellH/2);
+  ctx.fillText('left='+s.left,gx+s.left*(cellW+gapX)+cellW/2,gy+gridH+20);
+  ctx.fillText('right='+s.right,gx+s.right*(cellW+gapX)+cellW/2,gy+gridH+20);
+
+  // direction arrow
+  if(s.dir==='右'){ctx.fillStyle='#1a8fdd';ctx.font='bold 20px sans-serif';ctx.fillText('→',gx+gridW+30,gy+gridH/2);}
+  if(s.dir==='下'){ctx.fillStyle='#1a8fdd';ctx.font='bold 20px sans-serif';ctx.fillText('↓',gx+gridW/2,gy+gridH+40);}
+  if(s.dir==='左'){ctx.fillStyle='#1a8fdd';ctx.font='bold 20px sans-serif';ctx.fillText('←',gx-50,gy+gridH/2);}
+  if(s.dir==='上'){ctx.fillStyle='#1a8fdd';ctx.font='bold 20px sans-serif';ctx.fillText('↑',gx+gridW/2,gy-20);}
+
+  // result
+  const resY=gy+gridH+60;
+  ctx.fillStyle='#ffd700';ctx.font='bold 14px sans-serif';ctx.textAlign='left';
+  ctx.fillText('螺旋顺序: ['+s.res.join(', ')+']',40,resY);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>84 - 柱状图中最大的矩形</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+.controls button:disabled{opacity:.4;cursor:default}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>84 - 柱状图中最大的矩形</h1>
+<p id="desc">给定 n 个非负整数表示柱状图高度，每个柱子宽度为1，求柱状图中能勾勒出的最大矩形面积。单调栈维护递增高度序列，弹出时计算面积。</p>
+<canvas id="cv" width="900" height="460"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button id="btnReset" onclick="reset()">⏮ 重置</button>
+<button id="btnPrev" onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button id="btnNext" onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="1000" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#16c79a"></span>当前柱</span>
+<span><span class="dot" style="background:#0f3460"></span>栈中柱</span>
+<span><span class="dot" style="background:#e94560"></span>弹出计算</span>
+<span><span class="dot" style="background:#ffd700"></span>最大矩形</span>
+<span><span class="dot" style="background:rgba(255,215,0,0.15)"></span>最大区域</span>
+</div>
+<script>
+const heights=[2,1,5,6,2,3];
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const n=heights.length;
+  let stack=[];
+  let maxArea=0,maxH=0,maxL=0,maxR=0;
+  steps.push({stack:[...stack],i:-1,action:'init',desc:'初始化：空栈，最大面积=0',maxArea,maxL,maxR,areaInfo:null});
+  for(let i=0;i<=n;i++){
+    const h=i<n?heights[i]:0;
+    steps.push({stack:[...stack],i,action:'peek',desc:`考察柱 i=${i}${i<n?', height='+h:' (哨兵0)'}`,maxArea,maxL,maxR,areaInfo:null});
+    while(stack.length>0&&heights[stack[stack.length-1]]>h){
+      const top=stack.pop();
+      const height=heights[top];
+      const width=stack.length===0?i:i-stack[stack.length-1]-1;
+      const area=height*width;
+      const left=stack.length===0?0:stack[stack.length-1]+1;
+      const right=i-1;
+      if(area>maxArea){maxArea=area;maxH=height;maxL=left;maxR=right;}
+      steps.push({stack:[...stack],i,action:'pop',popped:top,height,width,area,left,right,desc:`弹出 i=${top}(h=${height})，宽度=${width}(${stack.length===0?'0到'+(i-1):'('+stack[stack.length-1]+'+1)到'+(i-1)}')，面积=${height}×${width}=${area}`,maxArea,maxL,maxR,areaInfo:{top,height,width,area,left,right}});
+    }
+    if(i<n){
+      stack.push(i);
+      steps.push({stack:[...stack],i,action:'push',desc:`入栈 i=${i}(h=${h})，栈保持递增`,maxArea,maxL,maxR,areaInfo:null});
+    }
+  }
+  steps.push({stack:[],i:n,action:'done',desc:`遍历结束！最大矩形面积 = ${maxArea}（高度=${maxH}，范围[${maxL},${maxR}]）`,maxArea,maxL,maxR,areaInfo:null,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const barW=60,gap=20,totalW=heights.length*(barW+gap)-gap;
+const offsetX=(W-totalW)/2,maxBarH=250,baseY=H-80;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{stack:[],i:-1,maxArea:0,maxL:0,maxR:0,areaInfo:null}:steps[cur];
+  // draw max area region
+  if(s.maxArea>0){
+    const x1=offsetX+s.maxL*(barW+gap);
+    const x2=offsetX+s.maxR*(barW+gap)+barW;
+    const maxHVal=heights.slice(s.maxL,s.maxR+1);
+    const hVal=Math.min(...maxHVal);
+    const bh=hVal*(maxBarH/Math.max(...heights));
+    ctx.fillStyle='rgba(255,215,0,0.1)';
+    ctx.fillRect(x1,baseY-bh,x2-x1,bh);
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=2;ctx.setLineDash([6,3]);
+    ctx.strokeRect(x1,baseY-bh,x2-x1,bh);
+    ctx.setLineDash([]);
+  }
+  // draw area being calculated
+  if(s.areaInfo&&s.areaInfo.area>0){
+    const ai=s.areaInfo;
+    const x1=offsetX+ai.left*(barW+gap);
+    const x2=offsetX+ai.right*(barW+gap)+barW;
+    const bh=ai.height*(maxBarH/Math.max(...heights));
+    ctx.fillStyle='rgba(233,69,96,0.15)';
+    ctx.fillRect(x1,baseY-bh,x2-x1,bh);
+    ctx.strokeStyle='#e94560';ctx.lineWidth=2;
+    ctx.strokeRect(x1,baseY-bh,x2-x1,bh);
+    // area label
+    const midX=(x1+x2)/2;
+    ctx.fillStyle='#e94560';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`面积=${ai.area}`,midX,baseY-bh-12);
+  }
+  // draw bars
+  for(let i=0;i<heights.length;i++){
+    const x=offsetX+i*(barW+gap);
+    const h=heights[i]*(maxBarH/Math.max(...heights));
+    let color='#3a3a6a';
+    if(s.stack.includes(i))color='#0f3460';
+    if(s.action==='pop'&&s.popped===i)color='#e94560';
+    if(s.action==='peek'&&s.i===i&&i<heights.length)color='#16c79a';
+    if(s.action==='push'&&s.i===i)color='#16c79a';
+    if(s.final&&i>=s.maxL&&i<=s.maxR)color='#ffd700';
+    ctx.fillStyle=color;
+    ctx.fillRect(x,baseY-h,barW,h);
+    // height label
+    ctx.fillStyle='#eee';ctx.font='13px sans-serif';ctx.textAlign='center';
+    ctx.fillText(heights[i],x+barW/2,baseY-h-8);
+    // index label
+    ctx.fillStyle='#888';ctx.font='12px sans-serif';
+    ctx.fillText('i='+i,x+barW/2,baseY+20);
+  }
+  // draw stack visualization
+  const stkX=30,stkY=40,stkW=110,cellH=30;
+  ctx.fillStyle='#16213e';ctx.fillRect(stkX,stkY,stkW,320);
+  ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(stkX,stkY,stkW,320);
+  ctx.fillStyle='#16c79a';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+  ctx.fillText('单调栈(递增)',stkX+stkW/2,stkY+18);
+  for(let j=0;j<s.stack.length;j++){
+    const si=s.stack[j];
+    const cy=stkY+28+j*cellH;
+    ctx.fillStyle='#0f3460';
+    ctx.fillRect(stkX+5,cy,stkW-10,cellH-4);
+    ctx.fillStyle='#eee';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`i=${si} h=${heights[si]}`,stkX+stkW/2,cy+18);
+  }
+  // max area info
+  ctx.fillStyle='#ffd700';ctx.font='bold 14px sans-serif';ctx.textAlign='left';
+  ctx.fillText('最大面积: '+s.maxArea,W-200,30);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

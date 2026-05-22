@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>41 - 缺失的第一个正数</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>41 - 缺失的第一个正数</h1>
+<p id="desc">给定未排序整数数组，找出其中没有出现的最小正整数。循环排序：将每个在[1,n]范围内的值放到对应位置(值i放到索引i-1)，然后遍历找第一个nums[i]!=i+1。</p>
+<canvas id="cv" width="900" height="480"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="1000" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#16c79a"></span>当前位置</span>
+<span><span class="dot" style="background:#e94560"></span>交换对</span>
+<span><span class="dot" style="background:#1a8fdd"></span>目标位置</span>
+<span><span class="dot" style="background:#ffd700"></span>已归位</span>
+</div>
+<script>
+const origArr=[3,4,-1,1];
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const n=origArr.length;
+  const arr=[...origArr];
+  let idx=0;
+  steps.push({arr:[...arr],cur:0,swapA:-1,swapB:-1,phase:'sort',desc:'初始数组，开始循环排序：将值i放到索引i-1'});
+  while(idx<n){
+    const val=arr[idx];
+    if(val>=1&&val<=n&&val!==arr[val-1]){
+      const targetIdx=val-1;
+      steps.push({arr:[...arr],cur:idx,swapA:idx,swapB:targetIdx,phase:'swap',desc:`arr[${idx}]=${val}，应放到位置${targetIdx}，交换 arr[${idx}]=${val} ↔ arr[${targetIdx}]=${arr[targetIdx]}`});
+      [arr[idx],arr[targetIdx]]=[arr[targetIdx],arr[idx]];
+      steps.push({arr:[...arr],cur:idx,swapA:-1,swapB:-1,phase:'swapped',desc:`交换完成，arr[${idx}]=${arr[idx]}，arr[${targetIdx}]=${arr[targetIdx]}，继续检查位置${idx}`});
+    }else{
+      steps.push({arr:[...arr],cur:idx,swapA:-1,swapB:-1,phase:'skip',desc:`arr[${idx}]=${val}${val<1||val>n?' (超出[1,'+n+']范围)':' (已在正确位置或重复)'}，指针前进 → ${idx+1}`});
+      idx++;
+    }
+  }
+  // find first missing
+  steps.push({arr:[...arr],cur:-1,swapA:-1,swapB:-1,phase:'find',desc:'排序完成，开始查找第一个 nums[i] != i+1 的位置'});
+  for(let i=0;i<n;i++){
+    steps.push({arr:[...arr],cur:i,swapA:-1,swapB:-1,phase:'check',desc:`检查 arr[${i}]=${arr[i]}${arr[i]===i+1?' == '+(i+1)+' ✓':' != '+(i+1)+' ✗ 找到缺失!'}`});
+    if(arr[i]!==i+1){
+      steps.push({arr:[...arr],cur:i,swapA:-1,swapB:-1,phase:'found',desc:`缺失的第一个正数 = ${i+1}`,missing:i+1,final:true});
+      return;
+    }
+  }
+  steps.push({arr:[...arr],cur:-1,swapA:-1,swapB:-1,phase:'found',desc:`所有位置都正确，缺失的第一个正数 = ${n+1}`,missing:n+1,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=90,gap=15,n=origArr.length;
+const totalW=n*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2;
+const baseY=180;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{arr:[...origArr],cur:0,swapA:-1,swapB:-1,phase:'sort'}:steps[cur];
+  const arr=s.arr;
+  // target position labels
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    ctx.fillStyle='#888';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText('应放:'+((i+1)),x+cellW/2,baseY-25);
+  }
+  // draw cells
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a4a';
+    // already in correct position
+    if(arr[i]===i+1&&arr[i]>=1&&arr[i]<=n)bg='#1a3a2a';
+    if(s.cur===i)bg='#16c79a';
+    if(s.swapA===i||s.swapB===i)bg='#e94560';
+    if(s.phase==='check'&&s.cur===i)bg='#1a8fdd';
+    if(s.final&&s.cur===i)bg='#ffd700';
+    ctx.fillStyle=bg;
+    ctx.fillRect(x,baseY,cellW,50);
+    ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,baseY,cellW,50);
+    ctx.fillStyle=arr[i]<1||arr[i]>n?'#e94560':'#eee';ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+    ctx.fillText(arr[i],x+cellW/2,baseY+32);
+    // index
+    ctx.fillStyle='#888';ctx.font='11px sans-serif';
+    ctx.fillText('['+i+']',x+cellW/2,baseY+68);
+    // correct position check
+    if(arr[i]===i+1){
+      ctx.fillStyle='#16c79a';ctx.font='12px sans-serif';
+      ctx.fillText('✓',x+cellW/2,baseY+85);
+    }
+  }
+  // swap arrows
+  if(s.swapA>=0&&s.swapB>=0){
+    const x1=offsetX+s.swapA*(cellW+gap)+cellW/2;
+    const x2=offsetX+s.swapB*(cellW+gap)+cellW/2;
+    ctx.strokeStyle='#e94560';ctx.lineWidth=2;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(x1,baseY-10);ctx.lineTo(x2,baseY-10);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // result
+  if(s.final&&s.missing!==undefined){
+    ctx.fillStyle='#ffd700';ctx.font='bold 28px sans-serif';ctx.textAlign='center';
+    ctx.fillText('缺失的第一个正数 = '+s.missing,W/2,H-50);
+  }
+  // phase label
+  let label='';
+  if(s.phase==='sort'||s.phase==='skip')label='阶段1: 循环排序';
+  else if(s.phase==='swap'||s.phase==='swapped')label='阶段1: 交换元素到正确位置';
+  else if(s.phase==='find')label='阶段2: 查找缺失正数';
+  else if(s.phase==='check')label='阶段2: 检查每个位置';
+  else if(s.phase==='found')label='找到结果!';
+  ctx.fillStyle='#e94560';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText(label,W/2,H-20);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

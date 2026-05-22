@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>155-最小栈</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:320px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.stack-pair{display:flex;gap:24px;justify-content:center;margin-top:16px}
+.stack-col{min-width:120px}
+.stack-col-title{text-align:center;color:#aaa;font-size:13px;margin-bottom:8px}
+.stack-col-title .accent{color:#16c79a;font-weight:bold}
+.stack-box{display:flex;flex-direction:column-reverse;align-items:center;min-height:240px;gap:4px;padding:10px;border:2px dashed #333;border-radius:8px;background:#0f346022}
+.stack-item{width:80px;height:44px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:bold;font-family:monospace;transition:all .3s;animation:slideIn .3s ease}
+.stack-item.main{background:#16c79a33;border:2px solid #16c79a;color:#16c79a}
+.stack-item.min{background:#e9456033;border:2px solid #e94560;color:#e94560}
+.stack-item.top{transform:scale(1.08);box-shadow:0 0 10px rgba(22,199,154,0.3)}
+.stack-item.min-top{transform:scale(1.08);box-shadow:0 0 10px rgba(233,69,96,0.3)}
+@keyframes slideIn{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.ops-list{margin-top:16px;max-height:200px;overflow-y:auto}
+.op-item{padding:4px 8px;border-radius:4px;font-size:12px;font-family:monospace;margin:2px 0;color:#aaa}
+.op-item.current{background:#e9456022;color:#e94560}
+.op-item .op-name{color:#16c79a;font-weight:bold}
+.min-display{margin-top:12px;text-align:center}
+.min-label{color:#aaa;font-size:12px}
+.min-value{font-size:28px;font-weight:bold;font-family:monospace;color:#e94560}
+</style>
+</head>
+<body>
+<h1>155 - 最小栈</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">操作列表</div>
+<div style="color:#aaa;font-size:13px">操作序列: push(-2), push(0), push(-3), getMin, pop, top, getMin</div>
+<div class="ops-list" id="opsList"></div>
+</div>
+<div class="panel">
+<div class="panel-title">双栈可视化</div>
+<div class="stack-pair">
+<div class="stack-col">
+<div class="stack-col-title"><span class="accent">主栈</span> stack</div>
+<div class="stack-box" id="mainStack"><div style="color:#555;font-size:14px">空栈</div></div>
+</div>
+<div class="stack-col">
+<div class="stack-col-title"><span class="accent">最小栈</span> minStack</div>
+<div class="stack-box" id="minStackBox"><div style="color:#555;font-size:14px">空栈</div></div>
+</div>
+</div>
+<div class="min-display">
+<div class="min-label">当前最小值 getMin()</div>
+<div class="min-value" id="minVal">-</div>
+</div>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const OPS=[
+  {op:'push',val:-2},{op:'push',val:0},{op:'push',val:-3},
+  {op:'getMin'},{op:'pop'},{op:'top'},{op:'getMin'}
+];
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function buildStack(mainSt,minSt,highlightPop){
+  const ms=document.getElementById('mainStack');ms.innerHTML='';
+  if(mainSt.length===0){ms.innerHTML='<div style="color:#555;font-size:14px">空栈</div>';}
+  else{
+    mainSt.forEach((v,i)=>{
+      const cls='main'+(i===mainSt.length-1?' top':'');
+      const opStyle=highlightPop&&i===mainSt.length-1?'opacity:0.3;':'';
+      ms.innerHTML+=`<div class="stack-item ${cls}" style="${opStyle}">${v}</div>`;
+    });
+  }
+  const mns=document.getElementById('minStackBox');mns.innerHTML='';
+  if(minSt.length===0){mns.innerHTML='<div style="color:#555;font-size:14px">空栈</div>';}
+  else{
+    minSt.forEach((v,i)=>{
+      const cls='min'+(i===minSt.length-1?' min-top':'');
+      const opStyle=highlightPop&&i===minSt.length-1?'opacity:0.3;':'';
+      mns.innerHTML+=`<div class="stack-item ${cls}" style="${opStyle}">${v}</div>`;
+    });
+  }
+}
+
+function generateSteps(){
+  steps=[];
+  const mainSt=[];const minSt=[];
+  const opLabels=OPS.map((o,i)=>{
+    const lbl=o.op==='push'?`push(${o.val})`:o.op==='pop'?`pop()`:`${o.op}()`;
+    return {idx:i,lbl};
+  });
+  steps.push({type:'start',mainSt:[],minSt:[],opIdx:-1,
+    desc:'初始化：主栈和最小栈均为空'});
+
+  OPS.forEach((op,opIdx)=>{
+    if(op.op==='push'){
+      const v=op.val;
+      mainSt.push(v);
+      const curMin=minSt.length>0?Math.min(v,minSt[minSt.length-1]):v;
+      minSt.push(curMin);
+      steps.push({type:'push',mainSt:[...mainSt],minSt:[...minSt],opIdx,val:v,curMin,
+        desc:`push(${v})：主栈入栈 ${v}，最小栈入栈 min(${v}, ${minSt.length>1?minSt[minSt.length-2]:v}) = ${curMin}`});
+    }else if(op.op==='pop'){
+      const poppedMain=mainSt.pop();
+      const poppedMin=minSt.pop();
+      steps.push({type:'pop_pre',mainSt:[...mainSt,poppedMain],minSt:[...minSt,poppedMin],opIdx,poppedMain,poppedMin,highlightPop:true,
+        desc:`pop()：主栈弹出 ${poppedMain}，最小栈弹出 ${poppedMin}`});
+      steps.push({type:'pop',mainSt:[...mainSt],minSt:[...minSt],opIdx,poppedMain,poppedMin,
+        desc:`pop()完成 → 主栈: [${mainSt.join(',')}]，最小栈: [${minSt.join(',')}]`});
+    }else if(op.op==='top'){
+      const topVal=mainSt[mainSt.length-1];
+      steps.push({type:'top',mainSt:[...mainSt],minSt:[...minSt],opIdx,topVal,
+        desc:`top()：返回栈顶元素 ${topVal}`});
+    }else if(op.op==='getMin'){
+      const minVal=minSt[minSt.length-1];
+      steps.push({type:'getMin',mainSt:[...mainSt],minSt:[...minSt],opIdx,minVal,
+        desc:`getMin()：最小栈栈顶 = ${minVal}`});
+    }
+  });
+  steps.push({type:'done',mainSt:[...mainSt],minSt:[...minSt],opIdx:OPS.length,
+    desc:'所有操作演示完毕'});
+}
+
+function buildOpsList(curOpIdx){
+  const ol=document.getElementById('opsList');ol.innerHTML='';
+  OPS.forEach((op,i)=>{
+    const lbl=op.op==='push'?`push(${op.val})`:op.op+'()';
+    const cls=i===curOpIdx?'current':'';
+    ol.innerHTML+=`<div class="op-item ${cls}"><span class="op-name">${i+1}.</span> ${lbl}</div>`;
+  });
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildStack(step.mainSt,step.minSt,step.highlightPop);
+  const minVal=step.minSt&&step.minSt.length>0?step.minSt[step.minSt.length-1]:'-';
+  document.getElementById('minVal').textContent=step.type==='getMin'?step.minVal:minVal;
+  buildOpsList(step.opIdx);
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},900);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  buildStack([],[],false);buildOpsList(-1);
+  document.getElementById('minVal').textContent='-';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){currentStep--;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildStack([],[],false);buildOpsList(-1);
+</script>
+</body>
+</html>

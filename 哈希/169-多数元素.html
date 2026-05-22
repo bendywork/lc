@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>169 - 多数元素</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.header{width:100%;background:linear-gradient(135deg,#16213e,#0f3460);padding:24px 0;text-align:center;border-bottom:2px solid #e94560}
+.header h1{font-size:28px;color:#e94560;margin-bottom:6px}
+.header p{color:#aaa;font-size:14px}
+.example{background:#16213e;border-radius:12px;padding:18px 28px;margin:20px auto;max-width:800px;border:1px solid #333;width:90%}
+.example h3{color:#16c79a;margin-bottom:8px;font-size:16px}
+.example pre{color:#ccc;font-size:14px;line-height:1.6;white-space:pre-wrap}
+.canvas-box{background:#16213e;border-radius:12px;border:1px solid #333;margin:12px auto;max-width:1100px;width:95%;overflow:hidden}
+.canvas-box h3{text-align:center;padding:10px;color:#16c79a;font-size:15px;border-bottom:1px solid #333}
+canvas{display:block;margin:0 auto}
+.desc-panel{background:#16213e;border-radius:12px;padding:16px 24px;margin:12px auto;max-width:1100px;width:95%;border:1px solid #333;min-height:60px}
+.desc-panel .step-counter{color:#e94560;font-size:13px;margin-bottom:6px}
+.desc-panel .step-text{color:#eee;font-size:15px;line-height:1.6}
+.controls{display:flex;gap:12px;justify-content:center;margin:16px auto;flex-wrap:wrap}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:8px;padding:10px 22px;font-size:15px;cursor:pointer;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+.controls button:active{transform:scale(.95)}
+.spacer{height:30px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>LeetCode 169 - 多数元素</h1>
+  <p>Majority Element | Boyer-Moore 投票法</p>
+</div>
+<div class="example">
+  <h3>示例</h3>
+  <pre>输入：nums = [3,2,3]
+输出：3
+
+输入：nums = [2,2,1,1,1,2,2]
+输出：2</pre>
+</div>
+<div class="canvas-box">
+  <h3>Boyer-Moore 投票过程</h3>
+  <canvas id="mainCanvas" width="1060" height="520"></canvas>
+</div>
+<div class="desc-panel">
+  <div class="step-counter" id="stepCounter">步骤 0 / 0</div>
+  <div class="step-text" id="stepText">点击「播放」或「步骤前进」开始动画</div>
+</div>
+<div class="controls">
+  <button onclick="reset()">⏮ 重置</button>
+  <button onclick="prevStep()">◀ 步骤后退</button>
+  <button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+  <button onclick="nextStep()">步骤前进 ▶</button>
+</div>
+<div class="spacer"></div>
+
+<script>
+const nums=[2,2,1,1,1,2,2];
+const ctx=document.getElementById('mainCanvas').getContext('2d');
+const W=1060,H=520;
+const C={bg:'#1a1a2e',card:'#16213e',accent:'#e94560',hi:'#16c79a',text:'#eee',dim:'#555',found:'#ffdd57',vote:'#3498db'};
+
+function genSteps(){
+  const steps=[];
+  let candidate=null,count=0;
+  steps.push({desc:'初始状态：candidate = null, count = 0',curIdx:-1,candidate,count,resetFlag:false,done:false});
+  for(let i=0;i<nums.length;i++){
+    const v=nums[i];
+    if(count===0){
+      candidate=v;count=1;
+      steps.push({desc:`count = 0，选择新候选人 nums[${i}] = ${v}，count 变为 1`,curIdx:i,candidate,count,resetFlag:true,done:false});
+    } else if(v===candidate){
+      count++;
+      steps.push({desc:`nums[${i}] = ${v} === candidate = ${candidate}，投票一致，count++ → ${count}`,curIdx:i,candidate,count,resetFlag:false,done:false});
+    } else {
+      count--;
+      steps.push({desc:`nums[${i}] = ${v} ≠ candidate = ${candidate}，投票抵消，count-- → ${count}`,curIdx:i,candidate,count,resetFlag:false,done:false});
+    }
+  }
+  steps.push({desc:`投票结束！多数元素为 candidate = ${candidate}`,curIdx:-1,candidate,count,resetFlag:false,done:true});
+  return steps;
+}
+
+let steps=genSteps(),curStep=0,playing=false,timer=null;
+
+function rr(c,x,y,w,h,r,f,s){c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(f)c.fill();if(s)c.stroke();}
+
+function render(){
+  const step=steps[curStep];
+  ctx.clearRect(0,0,W,H);
+
+  // 1. Array row at top
+  const n=nums.length,cw=100,ch=52,gap=12,tw=n*cw+(n-1)*gap,sx=(W-tw)/2,sy=28;
+  ctx.fillStyle=C.hi;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('数组',W/2,16);
+  for(let i=0;i<n;i++){
+    const x=sx+i*(cw+gap);
+    const isCur=step.curIdx===i;
+    const isCandidate=step.candidate===nums[i]&&step.candidate!=null;
+    ctx.fillStyle=isCur?C.accent:isCandidate&&!step.done?C.hi:C.card;
+    ctx.strokeStyle=isCur?C.accent:isCandidate?C.hi:C.dim;ctx.lineWidth=isCur||isCandidate?3:1;
+    rr(ctx,x,sy,cw,ch,8,true,true);
+    ctx.fillStyle=isCur?'#fff':C.text;ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(nums[i],x+cw/2,sy+ch/2);
+    ctx.fillStyle=C.dim;ctx.font='12px sans-serif';ctx.fillText(`[${i}]`,x+cw/2,sy+ch+14);
+  }
+
+  // 2. Candidate & Count panel
+  const panelY=130;
+  ctx.fillStyle=C.accent;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('投票状态',W/2,panelY);
+  // candidate box
+  const cBoxX=W/2-200,cBoxY=panelY+16,cBoxW=160,cBoxH=50;
+  ctx.fillStyle=step.resetFlag?C.accent:C.card;ctx.strokeStyle=C.accent;ctx.lineWidth=2;
+  rr(ctx,cBoxX,cBoxY,cBoxW,cBoxH,8,true,true);
+  ctx.fillStyle=step.resetFlag?'#fff':C.text;ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(step.candidate!=null?`candidate: ${step.candidate}`:'candidate: null',cBoxX+cBoxW/2,cBoxY+cBoxH/2);
+
+  // count box
+  const ctBoxX=W/2+40,ctBoxY=panelY+16,ctBoxW=160,ctBoxH=50;
+  ctx.fillStyle=step.count===0&&!step.done?C.accent:C.vote;ctx.strokeStyle=step.count===0?C.accent:C.vote;ctx.lineWidth=2;
+  rr(ctx,ctBoxX,ctBoxY,ctBoxW,ctBoxH,8,true,true);
+  ctx.fillStyle='#fff';ctx.font='bold 20px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(`count: ${step.count}`,ctBoxX+ctBoxW/2,ctBoxY+ctBoxH/2);
+
+  // 3. Vote counter visualization (bar chart)
+  const barY=240,barH=180,barW=W-100;
+  ctx.fillStyle=C.hi;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('投票计数条（实时 count 值）',W/2,barY-8);
+  const maxCount=Math.ceil(nums.length/2)+1;
+  const countRatio=step.count/maxCount;
+  const filledW=barW*countRatio;
+  // bg bar
+  ctx.fillStyle='#0f3460';rr(ctx,50,barY,barW,barH,10,true,false);
+  // filled bar
+  if(filledW>0){
+    const grad=ctx.createLinearGradient(50,barY,50,barY+barH);
+    grad.addColorStop(0,step.resetFlag?C.accent:C.vote);grad.addColorStop(1,step.count===0?C.accent:'#1a6fa0');
+    ctx.fillStyle=grad;
+    rr(ctx,50,barY,Math.max(filledW,20),barH,10,true,false);
+  }
+  // count label on bar
+  ctx.fillStyle='#fff';ctx.font='bold 32px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(step.count,50+Math.max(filledW/2,40),barY+barH/2);
+  // scale marks
+  for(let i=0;i<=maxCount;i++){
+    const mx=50+barW*(i/maxCount);
+    ctx.fillStyle=C.dim;ctx.font='11px sans-serif';ctx.textAlign='center';
+    ctx.fillText(i,mx,barY+barH+16);
+    ctx.strokeStyle=C.dim;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(mx,barY+barH);ctx.lineTo(mx,barY+barH+6);ctx.stroke();
+  }
+
+  // 4. Step log (mini)
+  const logY=460;
+  ctx.fillStyle=C.dim;ctx.font='13px sans-serif';ctx.textAlign='left';
+  const logEntries=steps.slice(0,curStep+1).filter((_,idx)=>idx>0).slice(-4);
+  logEntries.forEach((s,i)=>{
+    ctx.fillStyle=i===logEntries.length-1?C.text:C.dim;
+    ctx.fillText(`[步骤${curStep-logEntries.length+i+1}] ${s.desc.substring(0,60)}${s.desc.length>60?'...':''}`,60,logY+i*18);
+  });
+
+  // 5. Done overlay
+  if(step.done){
+    ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.found;ctx.font='bold 48px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(`多数元素 = ${step.candidate}`,W/2,H/2-20);
+    ctx.font='20px sans-serif';ctx.fillStyle=C.text;
+    ctx.fillText(`出现次数 > ⌊n/2⌋ = ${Math.floor(nums.length/2)}`,W/2,H/2+30);
+  }
+
+  document.getElementById('stepCounter').textContent=`步骤 ${curStep} / ${steps.length-1}`;
+  document.getElementById('stepText').textContent=step.desc;
+}
+
+function reset(){stopPlay();curStep=0;render();}
+function nextStep(){if(curStep<steps.length-1){curStep++;render();}else stopPlay();}
+function prevStep(){if(curStep>0){curStep--;render();}}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)nextStep();else stopPlay();},1200);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+render();
+</script>
+</body>
+</html>

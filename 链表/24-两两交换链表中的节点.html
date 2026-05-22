@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeetCode 24 - 两两交换链表中的节点</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{margin:20px 0 10px;font-size:24px;color:#e94560}
+.subtitle{color:#888;font-size:14px;margin-bottom:15px}
+.canvas-wrap{border:1px solid #333;border-radius:8px;overflow:hidden}
+canvas{display:block}
+.controls{display:flex;gap:10px;margin:15px 0;flex-wrap:wrap;justify-content:center}
+.btn{background:#16213e;border:1px solid #e94560;color:#e94560;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit;transition:all .2s}
+.btn:hover{background:#e94560;color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.step-info{background:#16213e;border:1px solid #333;border-radius:8px;padding:15px 20px;max-width:920px;width:90%;margin-bottom:20px}
+.step-counter{color:#16c79a;font-size:14px;margin-bottom:8px}
+.step-desc{color:#ddd;font-size:15px;line-height:1.6}
+.legend{display:flex;gap:20px;margin:10px 0;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:13px;color:#aaa}
+.legend-dot{width:14px;height:14px;border-radius:3px}
+</style>
+</head>
+<body>
+<h1>24. 两两交换链表中的节点</h1>
+<p class="subtitle">给你一个链表，两两交换其中相邻的节点，并返回交换后链表的头节点。</p>
+<div class="legend">
+<div class="legend-item"><div class="legend-dot" style="background:#4fc3f7"></div>当前交换对</div>
+<div class="legend-item"><div class="legend-dot" style="background:#16c79a"></div>prev指针</div>
+<div class="legend-item"><div class="legend-dot" style="background:#ffb74d"></div>已交换</div>
+<div class="legend-item"><div class="legend-dot" style="background:#e94560"></div>指针重连</div>
+</div>
+<div class="canvas-wrap"><canvas id="canvas" width="920" height="500"></canvas></div>
+<div class="controls">
+<button class="btn" onclick="resetAnim()">⏮ 重置</button>
+<button class="btn" id="btnPrev" onclick="stepPrev()">◀ 步骤后退</button>
+<button class="btn" id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button class="btn" id="btnNext" onclick="stepNext()">步骤前进 ▶</button>
+</div>
+<div class="step-info">
+<div class="step-counter" id="stepCounter">步骤 0 / 0</div>
+<div class="step-desc" id="stepDesc">点击"播放"或"步骤前进"开始动画</div>
+</div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=920,H=500;
+const list=[1,2,3,4];
+const NW=60,NH=42,NGAP=36;
+const sx=50,ly=240;
+function buildSteps(){
+  const steps=[];
+  steps.push({arr:[...list],pairStart:-1,prevIdx:-1,phase:'init',ptrs:{},desc:'初始链表：1→2→3→4，两两交换相邻节点'});
+  steps.push({arr:[...list],pairStart:0,prevIdx:-1,phase:'identify',ptrs:{prev:-1,node1:0,node2:1},desc:'找到第一对：node1=1, node2=2，prev=dummy'});
+  steps.push({arr:[...list],pairStart:0,prevIdx:-1,phase:'swap1',ptrs:{prev:-1,node1:0,node2:1},desc:'第1步：node1.next = node2.next（1→3）'});
+  steps.push({arr:[...list],pairStart:0,prevIdx:-1,phase:'swap2',ptrs:{prev:-1,node1:0,node2:1},desc:'第2步：node2.next = node1（2→1）'});
+  steps.push({arr:[...list],pairStart:0,prevIdx:-1,phase:'swap3',ptrs:{prev:-1,node1:0,node2:1},desc:'第3步：prev.next = node2（dummy→2）'});
+  const after1=[2,1,3,4];
+  steps.push({arr:after1,pairStart:2,prevIdx:1,phase:'after_swap',ptrs:{prev:1,node1:2,node2:3},desc:'交换完成：2→1→3→4，prev移到1，找下一对：node1=3, node2=4'});
+  steps.push({arr:after1,pairStart:2,prevIdx:1,phase:'swap1',ptrs:{prev:1,node1:2,node2:3},desc:'第1步：node1.next = node2.next（3→null）'});
+  steps.push({arr:after1,pairStart:2,prevIdx:1,phase:'swap2',ptrs:{prev:1,node1:2,node2:3},desc:'第2步：node2.next = node1（4→3）'});
+  steps.push({arr:after1,pairStart:2,prevIdx:1,phase:'swap3',ptrs:{prev:1,node1:2,node2:3},desc:'第3步：prev.next = node2（1→4）'});
+  const after2=[2,1,4,3];
+  steps.push({arr:after2,pairStart:-1,prevIdx:3,phase:'done',ptrs:{},desc:`完成！结果：${after2.join('→')}`});
+  return steps;
+}
+const steps=buildSteps();
+let curStep=-1,playing=false,timer=null;
+function roundRect(x,y,w,h,r,fill,stroke){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();if(fill)ctx.fill();if(stroke)ctx.stroke();
+}
+function drawArrow(x1,y1,x2,y2,color,dashed){
+  ctx.strokeStyle=color||'#666';ctx.lineWidth=2;if(dashed)ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();if(dashed)ctx.setLineDash([]);
+  const a=Math.atan2(y2-y1,x2-x1),sz=7;ctx.fillStyle=color||'#666';ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-sz*Math.cos(a-Math.PI/6),y2-sz*Math.sin(a-Math.PI/6));
+  ctx.lineTo(x2-sz*Math.cos(a+Math.PI/6),y2-sz*Math.sin(a+Math.PI/6));ctx.closePath();ctx.fill();
+}
+function drawCurvedArrow(x1,y1,x2,y2,color,curve){
+  ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.beginPath();
+  ctx.moveTo(x1,y1);ctx.quadraticCurveTo((x1+x2)/2,y1+curve,x2,y2);ctx.stroke();ctx.setLineDash([]);
+  const a2=Math.atan2(y2-(y1+curve)/2,x2-x1),sz=6;ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-sz*Math.cos(a2-0.5),y2-sz*Math.sin(a2-0.5));
+  ctx.lineTo(x2-sz*Math.cos(a2+0.5),y2-sz*Math.sin(a2+0.5));ctx.closePath();ctx.fill();
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,W,H);
+  const s=curStep>=0?steps[curStep]:steps[0];
+  const arr=s.arr;
+  const hasDummy=s.phase!=='init'&&s.phase!=='done';
+  const dx=hasDummy?sx+NW+NGAP:sx;
+  if(hasDummy){
+    ctx.fillStyle='#16213e';ctx.strokeStyle='#16c79a';ctx.lineWidth=1.5;
+    roundRect(sx,ly,NW,NH,6,true,true);
+    ctx.fillStyle='#16c79a';ctx.font='11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('dummy',sx+NW/2,ly+NH/2);
+    drawArrow(sx+NW+2,ly+NH/2,dx-2,ly+NH/2,'#888');
+  }
+  for(let i=0;i<arr.length;i++){
+    const x=dx+i*(NW+NGAP);
+    const isPair=s.pairStart>=0&&(i===s.pairStart||i===s.pairStart+1);
+    const isDone=s.phase==='done';
+    const swapIdx=s.phase==='after_swap'||s.phase==='done'?Math.floor(i/2)*2:-1;
+    let fillColor='#2a2a4a',strokeColor='#555';
+    if(isPair){fillColor='#4fc3f7';strokeColor='#4fc3f7';}
+    ctx.fillStyle=fillColor;ctx.strokeStyle=strokeColor;ctx.lineWidth=isPair?2.5:1.5;
+    roundRect(x,ly,NW,NH,6,true,true);
+    ctx.fillStyle=isPair?'#fff':'#ccc';ctx.font='bold 18px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(arr[i],x+NW/2,ly+NH/2);
+    if(s.ptrs&&(i===s.ptrs.node1||i===s.ptrs.node2)){
+      const lbl=i===s.ptrs.node1?'node1':'node2';
+      ctx.font='bold 11px Microsoft YaHei';ctx.fillStyle='#4fc3f7';ctx.fillText(lbl,x+NW/2,ly-10);
+    }
+    if(s.ptrs&&i===s.ptrs.prev&&i>=0){
+      ctx.font='bold 11px Microsoft YaHei';ctx.fillStyle='#16c79a';ctx.fillText('prev',dx+i*(NW+NGAP)+NW/2,ly+NH+14);
+    }
+    if(s.ptrs&&s.ptrs.prev===-1&&i===0&&hasDummy){
+      ctx.font='bold 11px Microsoft YaHei';ctx.fillStyle='#16c79a';ctx.fillText('prev',sx+NW/2,ly+NH+14);
+    }
+    if(i<arr.length-1)drawArrow(x+NW+2,ly+NH/2,x+NW+NGAP-2,ly+NH/2,'#666');
+  }
+  if(s.phase==='swap1'&&s.ptrs){
+    const n1=dx+s.ptrs.node1*(NW+NGAP),n2=dx+s.ptrs.node2*(NW+NGAP);
+    const nextIdx=s.ptrs.node2+1;
+    if(nextIdx<arr.length){
+      drawCurvedArrow(n1+NW/2,ly,n2+NW+NGAP+NW/2,ly,'#e94560',-40);
+    }
+  }
+  if(s.phase==='swap2'&&s.ptrs){
+    drawCurvedArrow(dx+s.ptrs.node2*(NW+NGAP)+NW+2,ly+NH,dx+s.ptrs.node1*(NW+NGAP)+NW/2,ly,'#e94560',50);
+  }
+  if(s.phase==='swap3'&&s.ptrs){
+    const prevX=s.ptrs.prev===-1?sx:dx+s.ptrs.prev*(NW+NGAP);
+    drawCurvedArrow(prevX+NW/2,ly+NH,dx+s.ptrs.node2*(NW+NGAP)+NW/2,ly,'#e94560',50);
+  }
+  ctx.textAlign='start';ctx.textBaseline='alphabetic';
+}
+function updateUI(){
+  document.getElementById('stepCounter').textContent=`步骤 ${curStep+1} / ${steps.length}`;
+  document.getElementById('stepDesc').textContent=curStep>=0?steps[curStep].desc:'点击"播放"或"步骤前进"开始动画';
+  document.getElementById('btnPrev').disabled=curStep<=0;
+  document.getElementById('btnNext').disabled=curStep>=steps.length-1;
+}
+function stepNext(){if(curStep<steps.length-1){curStep++;draw();updateUI();}else stopPlay();}
+function stepPrev(){if(curStep>0){curStep--;draw();updateUI();}}
+function togglePlay(){playing?stopPlay():startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{curStep<steps.length-1?stepNext():stopPlay()},1400);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);}
+function resetAnim(){stopPlay();curStep=-1;draw();updateUI();}
+draw();updateUI();
+</script>
+</body>
+</html>

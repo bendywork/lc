@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>51-N皇后</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:300px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+canvas{display:block;margin:0 auto;background:#0f3460;border-radius:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.chess-board{display:grid;grid-template-columns:repeat(4,50px);grid-template-rows:repeat(4,50px);gap:2px;margin:12px auto;width:fit-content}
+.chess-cell{width:50px;height:50px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:28px;transition:all .3s}
+.chess-cell.light{background:#2a2a4a}.chess-cell.dark{background:#1a1a3a}
+.chess-cell.queen{background:#16c79a55;border:2px solid #16c79a}
+.chess-cell.conflict{background:#e9456055;border:2px solid #e94560}
+.chess-cell.trying{background:#ffd70033;border:2px solid #ffd700}
+.conflict-info{margin-top:10px;font-size:12px;color:#e94560;min-height:20px}
+.result-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.result-tag{background:#0f3460;color:#16c79a;padding:3px 8px;border-radius:4px;font-size:12px;font-family:monospace}
+.result-tag.current{background:#e94560;color:#fff}
+</style>
+</head>
+<body>
+<h1>51 - N皇后 (N=4)</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">棋盘可视化</div>
+<div class="chess-board" id="chessBoard"></div>
+<div class="conflict-info" id="conflictInfo"></div>
+<div style="margin-top:12px"><div style="color:#aaa;font-size:13px;margin-bottom:6px">有效解:</div><div class="result-list" id="resultList"></div></div>
+</div>
+<div class="panel">
+<div class="panel-title">回溯递归过程</div>
+<canvas id="recCanvas" width="520" height="420"></canvas>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const N=4;
+const canvas=document.getElementById('recCanvas');
+const ctx=canvas.getContext('2d');
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function buildBoard(queens,tryingRow,tryingCol,conflicts){
+  const board=document.getElementById('chessBoard');board.innerHTML='';
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      const isQueen=queens[r]===c;
+      const isTrying=tryingRow===r&&tryingCol===c;
+      const isConflict=conflicts&&conflicts.some(([cr,cc])=>cr===r&&cc===c);
+      const cls=(r+c)%2===0?'light':'dark';
+      let cellCls=cls;
+      if(isConflict)cellCls='conflict';
+      else if(isTrying)cellCls='trying';
+      else if(isQueen)cellCls='queen';
+      else cellCls=cls;
+      board.innerHTML+=`<div class="chess-cell ${cellCls}">${isQueen?'♛':isTrying?'?':''}</div>`;
+    }
+  }
+}
+
+function findConflicts(queens,row,col){
+  const conflicts=[];
+  for(let r=0;r<row;r++){
+    const c=queens[r];
+    if(c===col)conflicts.push([r,c]);
+    if(Math.abs(c-col)===Math.abs(r-row))conflicts.push([r,c]);
+  }
+  return conflicts;
+}
+
+function generateSteps(){
+  steps=[];
+  const queens=new Array(N).fill(-1);
+  function dfs(row){
+    if(row===N){
+      steps.push({type:'solution',queens:[...queens],row,tryingRow:-1,tryingCol:-1,conflicts:[],
+        desc:`找到有效解！第 ${N} 行已放完: [${queens.join(',')}]`});
+      return;
+    }
+    for(let col=0;col<N;col++){
+      const conflicts=findConflicts(queens,row,col);
+      const hasConflict=conflicts.length>0;
+      steps.push({type:'try',queens:[...queens],row,tryingRow:row,tryingCol:col,conflicts,
+        desc:`第 ${row} 行尝试列 ${col}${hasConflict?' → 冲突！列冲突或对角线冲突':' → 无冲突，放置皇后♛'}`});
+      if(!hasConflict){
+        queens[row]=col;
+        steps.push({type:'place',queens:[...queens],row,tryingRow:row,tryingCol:col,conflicts:[],
+          desc:`放置皇后♛ 在 [${row}, ${col}]`});
+        dfs(row+1);
+        queens[row]=-1;
+        steps.push({type:'backtrack',queens:[...queens],row,tryingRow:row,tryingCol:-1,conflicts:[],
+          desc:`回溯第 ${row} 行，移除皇后`});
+      }
+    }
+    steps.push({type:'row_fail',queens:[...queens],row,tryingRow:-1,tryingCol:-1,conflicts:[],
+      desc:`第 ${row} 行所有列均冲突，无法放置`});
+  }
+  steps.push({type:'start',queens:new Array(N).fill(-1),row:0,tryingRow:-1,tryingCol:-1,conflicts:[],
+    desc:`开始N皇后求解，N=${N}`});
+  dfs(0);
+  steps.push({type:'done',queens:new Array(N).fill(-1),row:0,tryingRow:-1,tryingCol:-1,conflicts:[],
+    desc:`求解完成，共找到 ${steps.filter(s=>s.type==='solution').length} 个有效解`});
+}
+
+function drawRecursion(step){
+  ctx.clearRect(0,0,520,420);
+  if(!step){ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',200,200);return;}
+  const x0=40,y0=30,lh=35;
+  ctx.font='13px monospace';ctx.textAlign='left';ctx.textBaseline='middle';
+  let y=y0;
+  for(let i=0;i<=currentStep&&i<steps.length;i++){
+    const s=steps[i];
+    const isCur=i===currentStep;
+    const indent=s.row*20;
+    const prefix=s.type==='try'?'├─ ':s.type==='place'?'│  ✓ ':s.type==='backtrack'?'│  ↩ ':s.type==='solution'?'★ ':s.type==='row_fail'?'✗ ':'';
+    ctx.fillStyle=isCur?'#e94560':s.type==='solution'?'#16c79a':s.type==='row_fail'?'#e94560':s.type==='conflict'?'#e94560':'#aaa';
+    if(isCur){ctx.fillRect(30,y-12,460,24);ctx.fillStyle='#fff';}
+    ctx.fillText(' '.repeat(indent/4)+prefix+s.desc.slice(0,40),x0+indent,y);
+    y+=lh;
+    if(y>410)break;
+  }
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildBoard(step.queens,step.tryingRow,step.tryingCol,step.conflicts);
+  document.getElementById('conflictInfo').textContent=step.conflicts.length?
+    `冲突位置: ${step.conflicts.map(([r,c])=>`[${r},${c}]`).join(', ')}`:'';
+  if(step.type==='solution'){
+    const rl=document.getElementById('resultList');
+    const tag=document.createElement('span');tag.className='result-tag current';
+    tag.textContent=`[${step.queens.join(',')}]`;rl.appendChild(tag);
+  }else{document.querySelectorAll('.result-tag.current').forEach(t=>t.classList.remove('current'));}
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  drawRecursion(step);
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},700);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  document.getElementById('resultList').innerHTML='';
+  document.getElementById('conflictInfo').textContent='';
+  buildBoard(new Array(N).fill(-1),-1,-1,[]);
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  ctx.clearRect(0,0,520,420);ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',200,200);
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){currentStep--;
+  document.getElementById('resultList').innerHTML='';
+  for(let i=0;i<=currentStep;i++){if(steps[i].type==='solution'){
+    const tag=document.createElement('span');tag.className='result-tag';tag.textContent=`[${steps[i].queens.join(',')}]`;
+    document.getElementById('resultList').appendChild(tag);}}
+  updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildBoard(new Array(N).fill(-1),-1,-1,[]);ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',200,200);
+</script>
+</body>
+</html>

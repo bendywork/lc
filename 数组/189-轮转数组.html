@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>189 - 轮转数组</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:900px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>189 - 轮转数组</h1>
+<p id="desc">给定数组和整数k，将数组向右轮转k个位置。三步翻转法：1)翻转整个数组；2)翻转前k个；3)翻转后n-k个。</p>
+<canvas id="cv" width="900" height="460"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="800" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#1a8fdd"></span>翻转范围</span>
+<span><span class="dot" style="background:#e94560"></span>交换对</span>
+<span><span class="dot" style="background:#16c79a"></span>已翻转</span>
+<span><span class="dot" style="background:#ffd700"></span>最终结果</span>
+</div>
+<script>
+const origArr=[1,2,3,4,5,6,7];
+const k=3;
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const n=origArr.length;
+  const kk=k%n;
+  const arr=[...origArr];
+  steps.push({arr:[...arr],phase:'init',swapL:-1,swapR:-1,flipL:-1,flipR:-1,desc:`原始数组，k=${kk}，n=${n}`});
+  // step1: reverse entire array
+  steps.push({arr:[...arr],phase:'reverse1-start',swapL:-1,swapR:-1,flipL:0,flipR:n-1,desc:'步骤1：翻转整个数组 [0,'+(n-1)+']'});
+  let l=0,r=n-1;
+  while(l<r){
+    [arr[l],arr[r]]=[arr[r],arr[l]];
+    steps.push({arr:[...arr],phase:'reverse1',swapL:l,swapR:r,flipL:0,flipR:n-1,desc:`交换 arr[${l}]=${origArr[l]} ↔ arr[${r}]=${origArr[r]}`});
+    l++;r--;
+  }
+  steps.push({arr:[...arr],phase:'reverse1-done',swapL:-1,swapR:-1,flipL:-1,flipR:-1,desc:'步骤1完成：整个数组已翻转 → ['+arr.join(', ')+']'});
+  // step2: reverse first k
+  steps.push({arr:[...arr],phase:'reverse2-start',swapL:-1,swapR:-1,flipL:0,flipR:kk-1,desc:'步骤2：翻转前'+kk+'个元素 [0,'+(kk-1)+']'});
+  l=0;r=kk-1;
+  while(l<r){
+    [arr[l],arr[r]]=[arr[r],arr[l]];
+    steps.push({arr:[...arr],phase:'reverse2',swapL:l,swapR:r,flipL:0,flipR:kk-1,desc:`交换 arr[${l}] ↔ arr[${r}]`});
+    l++;r--;
+  }
+  steps.push({arr:[...arr],phase:'reverse2-done',swapL:-1,swapR:-1,flipL:-1,flipR:-1,desc:'步骤2完成：前'+kk+'个已翻转 → ['+arr.join(', ')+']'});
+  // step3: reverse last n-k
+  steps.push({arr:[...arr],phase:'reverse3-start',swapL:-1,swapR:-1,flipL:kk,flipR:n-1,desc:'步骤3：翻转后'+(n-kk)+'个元素 ['+kk+','+(n-1)+']'});
+  l=kk;r=n-1;
+  while(l<r){
+    [arr[l],arr[r]]=[arr[r],arr[l]];
+    steps.push({arr:[...arr],phase:'reverse3',swapL:l,swapR:r,flipL:kk,flipR:n-1,desc:`交换 arr[${l}] ↔ arr[${r}]`});
+    l++;r--;
+  }
+  steps.push({arr:[...arr],phase:'done',swapL:-1,swapR:-1,flipL:-1,flipR:-1,desc:`轮转完成！结果 = [${arr.join(', ')}]`,final:true});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=80,gap=15,n=origArr.length;
+const totalW=n*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=cur<0?{arr:[...origArr],phase:'init',swapL:-1,swapR:-1,flipL:-1,flipR:-1}:steps[cur];
+  const arr=s.arr;
+  const baseY=150;
+  // original array label
+  ctx.fillStyle='#888';ctx.font='bold 13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('原始: ['+origArr.join(', ')+']',40,60);
+  ctx.fillText('k='+k,40,80);
+  // current array
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a4a';
+    // flip range highlight
+    if(s.flipL>=0&&i>=s.flipL&&i<=s.flipR)bg='#1a3a5a';
+    // swap highlight
+    if(s.swapL>=0&&(i===s.swapL||i===s.swapR))bg='#e94560';
+    // done
+    if(s.final){
+      if(i<k)bg='#ffd700';
+      else bg='#4a4a2a';
+    }
+    ctx.fillStyle=bg;
+    ctx.fillRect(x,baseY,cellW,50);
+    ctx.strokeStyle='#0f3460';ctx.lineWidth=1;ctx.strokeRect(x,baseY,cellW,50);
+    ctx.fillStyle='#eee';ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+    ctx.fillText(arr[i],x+cellW/2,baseY+32);
+    // index
+    ctx.fillStyle='#888';ctx.font='11px sans-serif';
+    ctx.fillText('['+i+']',x+cellW/2,baseY+65);
+  }
+  // swap arrows
+  if(s.swapL>=0){
+    const x1=offsetX+s.swapL*(cellW+gap)+cellW/2;
+    const x2=offsetX+s.swapR*(cellW+gap)+cellW/2;
+    ctx.strokeStyle='#e94560';ctx.lineWidth=2;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(x1,baseY-10);ctx.lineTo(x2,baseY-10);ctx.stroke();
+    ctx.setLineDash([]);
+    // arrow heads
+    ctx.fillStyle='#e94560';ctx.beginPath();ctx.moveTo(x2,baseY-10);ctx.lineTo(x2-8,baseY-16);ctx.lineTo(x2-8,baseY-4);ctx.closePath();ctx.fill();
+  }
+  // flip range bracket
+  if(s.flipL>=0){
+    const x1=offsetX+s.flipL*(cellW+gap);
+    const x2=offsetX+s.flipR*(cellW+gap)+cellW;
+    ctx.strokeStyle='#1a8fdd';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(x1,baseY+55);ctx.lineTo(x1,baseY+75);ctx.lineTo(x2,baseY+75);ctx.lineTo(x2,baseY+55);ctx.stroke();
+    ctx.fillStyle='#1a8fdd';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText('翻转范围',x1+(x2-x1)/2,baseY+88);
+  }
+  // phase label
+  let phaseLabel='';
+  if(s.phase==='init')phaseLabel='初始数组';
+  else if(s.phase.startsWith('reverse1'))phaseLabel='步骤1: 翻转整个数组';
+  else if(s.phase.startsWith('reverse2'))phaseLabel='步骤2: 翻转前k个';
+  else if(s.phase.startsWith('reverse3'))phaseLabel='步骤3: 翻转后n-k个';
+  else if(s.phase==='done')phaseLabel='轮转完成!';
+  ctx.fillStyle='#e94560';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+  ctx.fillText(phaseLabel,W/2,H-40);
+}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

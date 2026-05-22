@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>131-分割回文串</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+h1{color:#e94560;font-size:22px;margin-bottom:16px}
+.container{display:flex;gap:20px;width:100%;max-width:1200px;flex-wrap:wrap}
+.panel{background:#16213e;border-radius:12px;padding:16px;flex:1;min-width:300px}
+.panel-title{color:#16c79a;font-size:16px;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+canvas{display:block;margin:0 auto;background:#0f3460;border-radius:8px}
+.controls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .2s}
+button:hover{background:#c73650;transform:scale(1.05)}
+button:disabled{background:#555;cursor:not-allowed;transform:none}
+.info-box{background:#0f3460;border-radius:8px;padding:12px;margin-top:12px;min-height:60px}
+.step-info{color:#16c79a;font-size:14px;line-height:1.8}
+.string-display{display:flex;gap:2px;margin:10px 0;font-size:24px;font-family:monospace}
+.char-cell{padding:4px 8px;border-radius:4px;background:#0f3460;transition:all .3s;border-bottom:3px solid transparent}
+.char-cell.checked{border-bottom-color:#16c79a;color:#16c79a}
+.char-cell.current{border-bottom-color:#e94560;color:#e94560;background:#e9456022}
+.char-cell.palindrome{border-bottom-color:#16c79a;color:#16c79a;background:#16c79a22}
+.char-cell.not-palindrome{border-bottom-color:#e94560;color:#e94560;background:#e9456022}
+.cuts-display{margin-top:12px;background:#0f3460;border-radius:8px;padding:10px;font-family:monospace;font-size:14px;color:#16c79a;min-height:30px}
+.result-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;max-height:200px;overflow-y:auto}
+.result-tag{background:#0f3460;color:#16c79a;padding:3px 8px;border-radius:4px;font-size:12px;font-family:monospace}
+.result-tag.current{background:#e94560;color:#fff}
+.pal-check{margin-top:8px;font-size:12px;color:#aaa;min-height:20px}
+</style>
+</head>
+<body>
+<h1>131 - 分割回文串</h1>
+<div class="container">
+<div class="panel">
+<div class="panel-title">字符串 & 切割位置</div>
+<div style="color:#aaa;font-size:13px">s = "aab"</div>
+<div class="string-display" id="stringDisp"></div>
+<div class="pal-check" id="palCheck"></div>
+<div class="cuts-display" id="cutsDisp">当前分割: -</div>
+<div style="margin-top:16px"><div style="color:#aaa;font-size:13px;margin-bottom:6px">所有分割方案:</div><div class="result-list" id="resultList"></div></div>
+</div>
+<div class="panel">
+<div class="panel-title">回溯决策树</div>
+<canvas id="treeCanvas" width="560" height="440"></canvas>
+</div>
+</div>
+<div class="info-box" id="infoBox"><span class="step-info">点击 ▶播放 开始动画演示</span></div>
+<div class="controls">
+<button id="btnPlay" onclick="play()">▶播放</button>
+<button id="btnPause" onclick="pause()" disabled>⏸暂停</button>
+<button id="btnReset" onclick="reset()">⏮重置</button>
+<button id="btnPrev" onclick="prevStep()" disabled>◀步骤后退</button>
+<button id="btnNext" onclick="nextStep()" disabled>步骤前进▶</button>
+<span id="stepCounter" style="color:#aaa;font-size:14px;line-height:36px;margin-left:10px">步骤: 0/0</span>
+</div>
+<script>
+const S="aab";
+const canvas=document.getElementById('treeCanvas');
+const ctx=canvas.getContext('2d');
+let steps=[];let currentStep=0;let playing=false;let timer=null;
+
+function isPalindrome(s,start,end){
+  while(start<end){if(s[start]!==s[end])return false;start++;end--;}
+  return true;
+}
+
+function buildStringDisp(checkStart,checkEnd,isPal){
+  const sd=document.getElementById('stringDisp');sd.innerHTML='';
+  S.split('').forEach((ch,i)=>{
+    let cls='';
+    if(checkStart!==undefined&&i>=checkStart&&i<=checkEnd){
+      cls=isPal?'palindrome':'not-palindrome';
+    }
+    sd.innerHTML+=`<div class="char-cell ${cls}">${ch}</div>`;
+  });
+}
+
+function generateSteps(){
+  steps=[];
+  const treeNodes=[];let nid=0;
+  function dfs(start,path,parentId,depth){
+    const id=nid++;
+    const node={id,start,path:[...path],depth,children:[],isResult:false};
+    treeNodes.push(node);
+    if(parentId!==null){const p=treeNodes.find(n=>n.id===parentId);if(p)p.children.push(id);}
+    if(start===S.length){
+      node.isResult=true;
+      steps.push({type:'result',start,path:[...path],nodes:[...treeNodes],nodeId:id,checkStart:undefined,checkEnd:undefined,isPal:undefined,
+        desc:`找到分割方案: [${path.map(s=>'"'+s+'"').join(', ')}]`});
+      return;
+    }
+    for(let end=start;end<S.length;end++){
+      const sub=S.slice(start,end+1);
+      const pal=isPalindrome(S,start,end);
+      steps.push({type:'check',start,path:[...path],nodes:[...treeNodes],nodeId:id,checkStart:start,checkEnd:end,isPal:pal,sub,
+        desc:`检查 s[${start}..${end}]="${sub}" ${pal?'✓ 是回文':'✗ 不是回文'}`});
+      if(pal){
+        steps.push({type:'cut',start:end+1,path:[...path,sub],nodes:[...treeNodes],nodeId:id,checkStart:start,checkEnd:end,isPal:true,sub,
+          desc:`切割 "${sub}"，路径变为 [${[...path,sub].map(s=>'"'+s+'"').join(', ')}]`});
+        dfs(end+1,[...path,sub],id,depth+1);
+      }
+    }
+    steps.push({type:'backtrack',start,path:[...path],nodes:[...treeNodes],nodeId:id,checkStart:undefined,checkEnd:undefined,isPal:undefined,
+      desc:`回溯：从 start=${start} 返回，当前路径 [${path.map(s=>'"'+s+'"').join(', ')}]`});
+  }
+  steps.push({type:'start',start:0,path:[],nodes:[],nodeId:null,checkStart:undefined,checkEnd:undefined,isPal:undefined,
+    desc:`开始分割回文串，s="${S}"`});
+  dfs(0,[],null,0);
+  steps.push({type:'done',start:0,path:[],nodes:[],nodeId:null,checkStart:undefined,checkEnd:undefined,isPal:undefined,
+    desc:`搜索完成，共找到 ${steps.filter(s=>s.type==='result').length} 种分割方案`});
+}
+
+function layoutNodes(nodes){
+  const pos={};const leaves=[];
+  function getLeaves(node){
+    if(node.children.length===0){leaves.push(node.id);return;}
+    node.children.forEach(cid=>{const c=nodes.find(n=>n.id===cid);if(c)getLeaves(c);});
+  }
+  if(nodes.length>0)getLeaves(nodes[0]);
+  const lw=65;const tw=leaves.length*lw;const sx=Math.max(20,(560-tw)/2);
+  const lm={};leaves.forEach((lid,i)=>lm[lid]=sx+i*lw+lw/2);
+  function posN(node){
+    if(node.children.length===0){pos[node.id]={x:lm[node.id]||280,y:35+node.depth*55};return pos[node.id].x;}
+    let sum=0;node.children.forEach(cid=>{const c=nodes.find(n=>n.id===cid);if(c)sum+=posN(c);});
+    const avg=sum/node.children.length;
+    pos[node.id]={x:avg,y:35+node.depth*55};return avg;
+  }
+  if(nodes.length>0)posN(nodes[0]);return pos;
+}
+
+function drawTree(step){
+  ctx.clearRect(0,0,560,440);
+  if(!step||!step.nodes||step.nodes.length===0){ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,200);return;}
+  const nodes=step.nodes;const pos=layoutNodes(nodes);
+  nodes.forEach(node=>{
+    const p=pos[node.id];if(!p)return;
+    node.children.forEach(cid=>{const cp=pos[cid];if(!cp)return;
+      const isOn=step.path&&node.path&&step.path.every((v,i)=>node.path[i]===v);
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(cp.x,cp.y);
+      ctx.strokeStyle=isOn?'#16c79a':'#333';ctx.lineWidth=isOn?2:1;ctx.stroke();
+    });
+  });
+  nodes.forEach(node=>{
+    const p=pos[node.id];if(!p)return;
+    const isCur=step.nodeId===node.id;
+    const isOn=step.path&&node.path&&step.path.every((v,i)=>node.path[i]===v);
+    const r=isCur?18:isOn?15:11;
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);
+    ctx.fillStyle=isCur?'#e94560':isOn?'#16c79a':node.isResult?'#16c79a88':'#16213e';
+    ctx.fill();ctx.strokeStyle=isCur?'#e94560':isOn?'#16c79a':'#555';ctx.lineWidth=isCur?2.5:1;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    const lbl=node.path.length?node.path[node.path.length-1]:'root';
+    ctx.fillText(`"${lbl}"`,p.x,p.y);
+  });
+}
+
+function updateUI(step){
+  if(!step)return;
+  buildStringDisp(step.checkStart,step.checkEnd,step.isPal);
+  document.getElementById('palCheck').textContent=step.checkStart!==undefined?
+    `s[${step.checkStart}..${step.checkEnd}]="${S.slice(step.checkStart,step.checkEnd+1)}" ${step.isPal?'✓ 回文':'✗ 非回文'}`:'';
+  document.getElementById('cutsDisp').textContent=`当前分割: [${step.path.map(s=>'"'+s+'"').join(' | ')}]`||'-';
+  if(step.type==='result'){
+    const rl=document.getElementById('resultList');
+    const tag=document.createElement('span');tag.className='result-tag current';
+    tag.textContent=`[${step.path.map(s=>'"'+s+'"').join(',')}]`;rl.appendChild(tag);
+  }else{document.querySelectorAll('.result-tag.current').forEach(t=>t.classList.remove('current'));}
+  document.getElementById('infoBox').innerHTML=`<span class="step-info">${step.desc}</span>`;
+  drawTree(step);
+  document.getElementById('stepCounter').textContent=`步骤: ${currentStep+1}/${steps.length}`;
+}
+
+function play(){if(currentStep>=steps.length-1)reset();playing=true;
+  document.getElementById('btnPlay').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('btnNext').disabled=true;document.getElementById('btnPrev').disabled=true;
+  timer=setInterval(()=>{if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}else pause();},700);}
+function pause(){playing=false;clearInterval(timer);
+  document.getElementById('btnPlay').disabled=false;document.getElementById('btnPause').disabled=true;
+  document.getElementById('btnNext').disabled=currentStep>=steps.length-1;document.getElementById('btnPrev').disabled=currentStep<=0;}
+function reset(){pause();currentStep=0;
+  document.getElementById('resultList').innerHTML='';
+  buildStringDisp();document.getElementById('palCheck').textContent='';
+  document.getElementById('cutsDisp').textContent='当前分割: -';
+  document.getElementById('infoBox').innerHTML='<span class="step-info">点击 ▶播放 开始动画演示</span>';
+  ctx.clearRect(0,0,560,440);ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,200);
+  document.getElementById('stepCounter').textContent='步骤: 0/0';
+  document.getElementById('btnPrev').disabled=true;document.getElementById('btnNext').disabled=false;
+  generateSteps();}
+function nextStep(){if(currentStep<steps.length-1){currentStep++;updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+function prevStep(){if(currentStep>0){currentStep--;
+  document.getElementById('resultList').innerHTML='';
+  for(let i=0;i<=currentStep;i++){if(steps[i].type==='result'){
+    const tag=document.createElement('span');tag.className='result-tag';tag.textContent=`[${steps[i].path.map(s=>'"'+s+'"').join(',')}]`;
+    document.getElementById('resultList').appendChild(tag);}}
+  updateUI(steps[currentStep]);}
+  document.getElementById('btnPrev').disabled=currentStep<=0;document.getElementById('btnNext').disabled=currentStep>=steps.length-1;}
+generateSteps();buildStringDisp();ctx.fillStyle='#aaa';ctx.font='16px Microsoft YaHei';ctx.fillText('等待开始...',220,200);
+</script>
+</body>
+</html>

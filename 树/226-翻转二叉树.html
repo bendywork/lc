@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>226 - 翻转二叉树</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{color:#e94560;font-size:24px;margin-bottom:10px}
+#canvas{border:1px solid #333;border-radius:8px;background:#16213e}
+.controls{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap;justify-content:center}
+.controls button{background:#e94560;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;transition:background .2s}
+.controls button:hover{background:#c73a52}
+#stepInfo{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;min-height:80px;margin-top:10px}
+#stepInfo h3{color:#16c79a;margin-bottom:6px}
+#stepInfo p{line-height:1.6}
+.highlight{color:#e94560;font-weight:bold}
+#stackPanel{background:#16213e;border:1px solid #333;border-radius:8px;padding:14px;width:780px;margin-top:10px}
+#stackPanel h3{color:#16c79a;margin-bottom:6px}
+.stack-items{display:flex;gap:6px;flex-wrap:wrap;min-height:30px}
+.stack-item{background:#0f3460;padding:4px 10px;border-radius:4px;color:#16c79a;font-size:13px}
+.stack-item.active{background:#e94560;color:#fff}
+</style>
+</head>
+<body>
+<h1>226 - 翻转二叉树</h1>
+<canvas id="canvas" width="780" height="420"></canvas>
+<div class="controls">
+<button id="btnReset">⏮ 重置</button>
+<button id="btnPrev">⏪ 步骤后退</button>
+<button id="btnPlay">▶ 播放</button>
+<button id="btnNext">步骤前进 ⏩</button>
+</div>
+<div id="stepInfo"><h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p></div>
+<div id="stackPanel"><h3>递归栈</h3><div class="stack-items" id="stackItems"></div></div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=780,H=420;
+// Deep clone helper
+function cloneTree(n){if(!n)return null;return{val:n.val,left:cloneTree(n.left),right:cloneTree(n.right)};}
+const origTree={val:4,left:{val:2,left:{val:1,left:null,right:null},right:{val:3,left:null,right:null}},right:{val:7,left:{val:6,left:null,right:null},right:{val:9,left:null,right:null}}};
+const steps=[];
+function genSteps(node,stack){
+  if(!node)return;
+  stack.push(node.val);
+  steps.push({type:'enter',val:node.val,desc:`到达节点 ${node.val}，准备翻转左右子树`,tree:cloneTree(origTree),stack:[...stack]});
+  genSteps(node.left,stack);
+  genSteps(node.right,stack);
+  // swap
+  const tmp=node.left;node.left=node.right;node.right=tmp;
+  steps.push({type:'swap',val:node.val,desc:`翻转节点 ${node.val} 的左右子节点（${node.left?node.left.val:'null'} ↔ ${node.right?node.right.val:'null'}）`,tree:cloneTree(origTree),stack:[...stack]});
+  stack.pop();
+}
+genSteps(origTree,[]);
+steps.push({type:'done',desc:'翻转完成！整棵树已镜像',tree:cloneTree(origTree),stack:[]});
+let curStep=-1,playing=false,timer=null;
+function assignPos(tree,x,y,spread,posMap){
+  if(!tree)return;posMap[tree.val]={x,y};
+  assignPos(tree.left,x-spread,y+60,spread/2,posMap);
+  assignPos(tree.right,x+spread,y+60,spread/2,posMap);
+}
+function drawTree(tree,curVal){
+  const posMap={};assignPos(tree,390,50,140,posMap);
+  function drawE(n){if(!n)return;const p=posMap[n.val];
+    if(n.left){const q=posMap[n.left.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawE(n.left);}
+    if(n.right){const q=posMap[n.right.val];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.stroke();drawE(n.right);}
+  }
+  function drawN(n){if(!n)return;const p=posMap[n.val];const isCur=n.val===curVal;
+    ctx.beginPath();ctx.arc(p.x,p.y,22,0,Math.PI*2);
+    if(isCur){ctx.fillStyle='#e94560';ctx.shadowColor='#e94560';ctx.shadowBlur=15;}
+    else{ctx.fillStyle='#0f3460';ctx.shadowBlur=0;}
+    ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle=isCur?'#e94560':'#444';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(n.val,p.x,p.y);
+    drawN(n.left);drawN(n.right);
+  }
+  drawE(tree);drawN(tree);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  if(s&&s.tree)drawTree(s.tree,s.val);
+}
+function renderUI(){
+  draw();const s=curStep>=0&&curStep<steps.length?steps[curStep]:null;
+  const infoEl=document.getElementById('stepInfo');
+  if(s){const tl={enter:'到达节点',swap:'翻转左右',done:'完成'};
+  infoEl.innerHTML=`<h3>步骤 ${curStep+1} / ${steps.length} — <span class="highlight">${tl[s.type]||s.type}</span></h3><p>${s.desc}</p>`;}
+  else infoEl.innerHTML=`<h3>步骤说明</h3><p>点击「播放」或「步骤前进」开始动画演示</p>`;
+  const si=document.getElementById('stackItems');const stk=s?s.stack:[];
+  si.innerHTML=stk.length?stk.map((v,i)=>`<span class="stack-item${i===stk.length-1?' active':''}">${v}</span>`).join(''):'<span style="color:#888">栈为空</span>';
+}
+function stepForward(){if(curStep<steps.length-1){curStep++;renderUI();}else stopPlay();}
+function stepBack(){if(curStep>=0){curStep--;renderUI();}}
+function resetAnim(){stopPlay();curStep=-1;renderUI();}
+function startPlay(){if(playing)return;playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)stepForward();else stopPlay();},800);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+document.getElementById('btnPlay').onclick=()=>{if(playing)stopPlay();else startPlay();};
+document.getElementById('btnNext').onclick=()=>{stopPlay();stepForward();};
+document.getElementById('btnPrev').onclick=()=>{stopPlay();stepBack();};
+document.getElementById('btnReset').onclick=resetAnim;
+renderUI();
+</script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeetCode 25 - K个一组翻转链表</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{margin:20px 0 10px;font-size:24px;color:#e94560}
+.subtitle{color:#888;font-size:14px;margin-bottom:15px}
+.canvas-wrap{border:1px solid #333;border-radius:8px;overflow:hidden}
+canvas{display:block}
+.controls{display:flex;gap:10px;margin:15px 0;flex-wrap:wrap;justify-content:center}
+.btn{background:#16213e;border:1px solid #e94560;color:#e94560;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit;transition:all .2s}
+.btn:hover{background:#e94560;color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.step-info{background:#16213e;border:1px solid #333;border-radius:8px;padding:15px 20px;max-width:920px;width:90%;margin-bottom:20px}
+.step-counter{color:#16c79a;font-size:14px;margin-bottom:8px}
+.step-desc{color:#ddd;font-size:15px;line-height:1.6}
+.legend{display:flex;gap:20px;margin:10px 0;flex-wrap:wrap;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:13px;color:#aaa}
+.legend-dot{width:14px;height:14px;border-radius:3px}
+</style>
+</head>
+<body>
+<h1>25. K个一组翻转链表</h1>
+<p class="subtitle">给你链表的头节点 head，每 k 个节点一组进行翻转，请你返回修改后的链表。k 是一个正整数，它的值小于或等于链表的长度。</p>
+<div class="legend">
+<div class="legend-item"><div class="legend-dot" style="background:#4fc3f7"></div>当前组</div>
+<div class="legend-item"><div class="legend-dot" style="background:#e94560"></div>翻转中</div>
+<div class="legend-item"><div class="legend-dot" style="background:#16c79a"></div>已翻转</div>
+<div class="legend-item"><div class="legend-dot" style="background:#ffb74d"></div>未处理</div>
+</div>
+<div class="canvas-wrap"><canvas id="canvas" width="920" height="500"></canvas></div>
+<div class="controls">
+<button class="btn" onclick="resetAnim()">⏮ 重置</button>
+<button class="btn" id="btnPrev" onclick="stepPrev()">◀ 步骤后退</button>
+<button class="btn" id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button class="btn" id="btnNext" onclick="stepNext()">步骤前进 ▶</button>
+</div>
+<div class="step-info">
+<div class="step-counter" id="stepCounter">步骤 0 / 0</div>
+<div class="step-desc" id="stepDesc">点击"播放"或"步骤前进"开始动画</div>
+</div>
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const W=920,H=500;
+const list=[1,2,3,4,5],K=2;
+const NW=56,NH=38,NGAP=30;
+const sx=60,ly=260;
+function buildSteps(){
+  const steps=[];
+  steps.push({arr:[...list],groupStart:-1,groupEnd:-1,reversed:[],phase:'init',ptrs:{},desc:`初始链表：1→2→3→4→5，K=${K}，每${K}个一组翻转`});
+  const numGroups=Math.floor(list.length/K);
+  let currentArr=[...list];
+  for(let g=0;g<numGroups;g++){
+    const gs=g*K,ge=gs+K-1;
+    steps.push({arr:[...currentArr],groupStart:gs,groupEnd:ge,phase:'check',ptrs:{start:gs,end:ge},desc:`第${g+1}组：找到节点${currentArr.slice(gs,ge+1).join('→')}，共${K}个，需要翻转`});
+    const group=currentArr.slice(gs,ge+1);
+    const rev=[...group].reverse();
+    steps.push({arr:[...currentArr],groupStart:gs,groupEnd:ge,phase:'reverse_start',ptrs:{prev:null,curr:gs,next:gs+1},desc:`开始翻转：prev=null, curr=${currentArr[gs]}, next=${currentArr[gs+1]}`});
+    for(let r=0;r<K;r++){
+      const ri=gs+r;
+      steps.push({arr:[...currentArr],groupStart:gs,groupEnd:ge,phase:'reverse_step',ptrs:{prev:ri-1>=gs?ri-1:null,curr:ri,next:ri+1<=ge?ri+1:null},desc:`翻转第${r+1}步：curr.next=prev，${currentArr[ri]}.next指向${r===0?'null':currentArr[ri-1]}`});
+    }
+    const newArr=[...currentArr];
+    const seg=newArr.splice(gs,K,...rev);
+    currentArr=newArr;
+    steps.push({arr:[...currentArr],groupStart:gs,groupEnd:ge,phase:'after_reverse',ptrs:{},desc:`第${g+1}组翻转完成：${rev.join('→')}，重新连接前后`});
+  }
+  if(list.length%K!==0){
+    const rem=list.length%K;
+    steps.push({arr:[...currentArr],groupStart:-1,groupEnd:-1,phase:'remainder',ptrs:{},desc:`剩余${rem}个节点不足K=${K}个，保持原样不翻转`});
+  }
+  steps.push({arr:[...currentArr],groupStart:-1,groupEnd:-1,phase:'done',ptrs:{},desc:`完成！结果：${currentArr.join('→')}`});
+  return steps;
+}
+const steps=buildSteps();
+let curStep=-1,playing=false,timer=null;
+function roundRect(x,y,w,h,r,fill,stroke){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();if(fill)ctx.fill();if(stroke)ctx.stroke();
+}
+function drawArrow(x1,y1,x2,y2,color){
+  ctx.strokeStyle=color||'#666';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  const a=Math.atan2(y2-y1,x2-x1),sz=7;ctx.fillStyle=color||'#666';ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-sz*Math.cos(a-Math.PI/6),y2-sz*Math.sin(a-Math.PI/6));
+  ctx.lineTo(x2-sz*Math.cos(a+Math.PI/6),y2-sz*Math.sin(a+Math.PI/6));ctx.closePath();ctx.fill();
+}
+function getNodeColor(i,s){
+  const numDoneGroups=Math.floor((s.groupStart>=0?s.groupStart:s.arr.length)/K);
+  if(s.phase==='done'||s.phase==='remainder')return '#16c79a';
+  if(s.phase==='after_reverse'){
+    if(i<s.groupEnd+1)return '#16c79a';
+    return '#ffb74d';
+  }
+  if(s.phase==='check'||s.phase==='reverse_start'||s.phase==='reverse_step'){
+    if(i<s.groupStart)return '#16c79a';
+    if(i>=s.groupStart&&i<=s.groupEnd)return s.phase==='reverse_step'?'#e94560':'#4fc3f7';
+    return '#ffb74d';
+  }
+  return '#4fc3f7';
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,W,H);
+  const s=curStep>=0?steps[curStep]:steps[0];
+  const arr=s.arr;
+  const numDone=s.phase==='done'||s.phase==='remainder'?arr.length:s.groupStart>=0?s.groupStart:0;
+  for(let i=0;i<arr.length;i++){
+    const x=sx+i*(NW+NGAP);
+    const color=getNodeColor(i,s);
+    const hl=color==='#e94560'||color==='#4fc3f7'||color==='#16c79a';
+    ctx.fillStyle=hl?color:'#2a2a4a';ctx.strokeStyle=color;ctx.lineWidth=hl?2.5:1.5;
+    roundRect(x,ly,NW,NH,6,true,true);
+    ctx.fillStyle=hl?'#fff':'#ccc';ctx.font='bold 18px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(arr[i],x+NW/2,ly+NH/2);
+    if(s.ptrs&&(i===s.ptrs.curr)){
+      ctx.font='bold 11px Microsoft YaHei';ctx.fillStyle='#e94560';ctx.fillText('curr',x+NW/2,ly-12);
+    }
+    if(s.ptrs&&s.ptrs.prev!==null&&i===s.ptrs.prev){
+      ctx.font='bold 11px Microsoft YaHei';ctx.fillStyle='#16c79a';ctx.fillText('prev',x+NW/2-16,ly-12);
+    }
+    if(s.ptrs&&s.ptrs.next!==null&&i===s.ptrs.next){
+      ctx.font='bold 11px Microsoft YaHei';ctx.fillStyle='#ffb74d';ctx.fillText('next',x+NW/2+16,ly-12);
+    }
+    if(i<arr.length-1){
+      const ac=getNodeColor(i,s)===getNodeColor(i+1,s)?getNodeColor(i,s):'#666';
+      drawArrow(x+NW+2,ly+NH/2,x+NW+NGAP-2,ly+NH/2,ac);
+    }
+  }
+  if(s.groupStart>=0&&s.groupEnd>=0&&s.phase!=='done'){
+    const gx1=sx+s.groupStart*(NW+NGAP)-6,gx2=sx+s.groupEnd*(NW+NGAP)+NW+6;
+    ctx.strokeStyle='#e94560';ctx.lineWidth=1.5;ctx.setLineDash([4,4]);
+    ctx.strokeRect(gx1,ly-20,gx2-gx1,NH+30);ctx.setLineDash([]);
+  }
+  ctx.textAlign='start';ctx.textBaseline='alphabetic';
+}
+function updateUI(){
+  document.getElementById('stepCounter').textContent=`步骤 ${curStep+1} / ${steps.length}`;
+  document.getElementById('stepDesc').textContent=curStep>=0?steps[curStep].desc:'点击"播放"或"步骤前进"开始动画';
+  document.getElementById('btnPrev').disabled=curStep<=0;
+  document.getElementById('btnNext').disabled=curStep>=steps.length-1;
+}
+function stepNext(){if(curStep<steps.length-1){curStep++;draw();updateUI();}else stopPlay();}
+function stepPrev(){if(curStep>0){curStep--;draw();updateUI();}}
+function togglePlay(){playing?stopPlay():startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{curStep<steps.length-1?stepNext():stopPlay()},1400);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);}
+function resetAnim(){stopPlay();curStep=-1;draw();updateUI();}
+draw();updateUI();
+</script>
+</body>
+</html>

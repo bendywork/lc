@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>438 - 找到字符串中所有字母异位词</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+h1{font-size:1.5em;margin-bottom:10px;color:#e94560}
+#desc{font-size:.9em;color:#aaa;margin-bottom:15px;text-align:center;max-width:800px}
+canvas{background:#16213e;border-radius:10px;border:1px solid #0f3460;margin-bottom:10px}
+#stepInfo{background:#16213e;border-radius:8px;padding:12px 20px;margin-bottom:10px;min-width:600px;border:1px solid #0f3460}
+#stepInfo .stepNum{color:#16c79a;font-weight:bold}
+#stepInfo .stepDesc{color:#ddd;margin-top:4px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.95em;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+#speed{width:60px;background:#16213e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px}
+.legend{display:flex;gap:18px;margin-top:8px;font-size:.85em;color:#aaa}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<h1>438 - 找到字符串中所有字母异位词</h1>
+<p id="desc">给定字符串 s 和 p，找到 s 中所有 p 的字母异位词的起始索引。固定大小滑动窗口（大小 = len(p)），比较窗口内字符频率与 p 的频率是否相同。</p>
+<canvas id="cv" width="900" height="500"></canvas>
+<div id="stepInfo"><span class="stepNum">步骤 0/0</span><div class="stepDesc">点击「播放」或「步骤前进」开始演示</div></div>
+<div class="controls">
+<button onclick="reset()">⏮ 重置</button>
+<button onclick="prevStep()">◀ 步骤后退</button>
+<button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+<button onclick="nextStep()">步骤前进 ▶</button>
+<label style="color:#aaa">速度:<input id="speed" type="number" value="800" min="100" max="3000" step="100">ms</label>
+</div>
+<div class="legend">
+<span><span class="dot" style="background:#5344a8"></span>滑动窗口</span>
+<span><span class="dot" style="background:#ffd700"></span>匹配（异位词）</span>
+<span><span class="dot" style="background:#16c79a"></span>频率匹配</span>
+<span><span class="dot" style="background:#e94560"></span>频率不匹配</span>
+</div>
+
+<script>
+const s='cbaebabacd',p='abc';
+const steps=[];
+function buildSteps(){
+  steps.length=0;
+  const pCount={};for(const c of p)pCount[c]=(pCount[c]||0)+1;
+  const k=p.length;
+  const sCount={};
+  let matchCount=0;
+  const uniqueChars=Object.keys(pCount).length;
+  const result=[];
+  steps.push({left:0,right:-1,sCount:{},matchCount,result:[...result],desc:'初始化：p="'+p+'"，pCount='+JSON.stringify(pCount)+'，窗口大小 k='+k,type:'init'});
+  // build first window
+  for(let right=0;right<k;right++){
+    const ch=s[right];
+    sCount[ch]=(sCount[ch]||0)+1;
+    if(pCount[ch]&&sCount[ch]===pCount[ch])matchCount++;
+    else if(pCount[ch]&&sCount[ch]===pCount[ch]+1)matchCount--;
+  }
+  const firstMatch=matchCount===uniqueChars;
+  if(firstMatch)result.push(0);
+  steps.push({left:0,right:k-1,sCount:{...sCount},matchCount,result:[...result],desc:`初始窗口 [0,${k-1}]，sCount=${JSON.stringify(sCount)}，matchCount=${matchCount}/${uniqueChars}${firstMatch?' → 匹配! 起始索引 0 加入结果':''}`,type:firstMatch?'match':'nomatch'});
+  // slide
+  for(let right=k;right<s.length;right++){
+    const left=right-k+1;
+    // remove left-1
+    const outCh=s[left-1];
+    if(pCount[outCh]){
+      if(sCount[outCh]===pCount[outCh])matchCount--;
+      else if(sCount[outCh]===pCount[outCh]+1)matchCount++;
+    }
+    sCount[outCh]--;
+    if(sCount[outCh]===0)delete sCount[outCh];
+    // add right
+    const inCh=s[right];
+    if(pCount[inCh]){
+      if(sCount[inCh]===pCount[inCh])matchCount--;
+      else if(sCount[inCh]===undefined||sCount[inCh]===pCount[inCh]-1)matchCount++;
+    }
+    sCount[inCh]=(sCount[inCh]||0)+1;
+    const matched=matchCount===uniqueChars;
+    if(matched)result.push(left);
+    steps.push({left,right,sCount:{...sCount},matchCount,result:[...result],desc:`窗口 [${left},${right}]：移出 '${outCh}'，移入 '${inCh}'，matchCount=${matchCount}/${uniqueChars}${matched?' → 匹配! 索引 '+left+' 加入结果':''}`,type:matched?'match':'nomatch'});
+  }
+  steps.push({left:s.length-k,right:s.length-1,sCount:{},matchCount,result:[...result],desc:`遍历完成，所有异位词起始索引 = [${result.join(', ')}]`,type:'end'});
+}
+buildSteps();
+
+let cur=-1,timer=null,playing=false;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height;
+const cellW=50,gap=5,n=s.length;
+const totalW=n*(cellW+gap)-gap;
+const offsetX=(W-totalW)/2,cellH=60,sBaseY=100;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const st=cur<0?{left:0,right:-1,sCount:{},matchCount:0,result:[],type:'init'}:steps[cur];
+  const pCount={};for(const c of p)pCount[c]=(pCount[c]||0)+1;
+  // p string
+  ctx.fillStyle='#888';ctx.font='14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('p = "'+p+'"  (pCount: '+Object.entries(pCount).map(([k,v])=>k+':'+v).join(' ')+')',W/2,30);
+  // s string label
+  ctx.fillStyle='#888';ctx.font='14px sans-serif';
+  ctx.fillText('s = "'+s+'"',W/2,sBaseY-10);
+  // window highlight
+  if(st.right>=0){
+    const x1=offsetX+st.left*(cellW+gap)-4,x2=offsetX+st.right*(cellW+gap)+cellW+4;
+    const isMatch=st.type==='match';
+    ctx.fillStyle=isMatch?'rgba(255,215,0,0.12)':'rgba(83,68,168,0.12)';
+    ctx.fillRect(x1,sBaseY,x2-x1,cellH);
+    ctx.strokeStyle=isMatch?'#ffd700':'#5344a8';ctx.lineWidth=isMatch?3:2;
+    ctx.strokeRect(x1,sBaseY,x2-x1,cellH);
+    ctx.fillStyle=isMatch?'#ffd700':'#5344a8';ctx.font='11px sans-serif';ctx.textAlign='center';
+    ctx.fillText(isMatch?'✓ 异位词!':'窗口 ['+st.left+','+st.right+']',x1+(x2-x1)/2,sBaseY-4);
+  }
+  // s cells
+  for(let i=0;i<n;i++){
+    const x=offsetX+i*(cellW+gap);
+    let bg='#2a2a5a',border='#3a3a7a',fg='#ccc';
+    const inWindow=st.right>=0&&i>=st.left&&i<=st.right;
+    if(inWindow){bg='#2a2a6a';border='#5344a8';fg='#fff';}
+    if(st.type==='match'&&inWindow){bg='#3a3a10';border='#ffd700';fg='#ffd700';}
+    ctx.fillStyle=bg;ctx.strokeStyle=border;ctx.lineWidth=2;
+    roundRect(ctx,x,sBaseY,cellW,cellH,6);ctx.fill();ctx.stroke();
+    ctx.fillStyle=fg;ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+    ctx.fillText(s[i],x+cellW/2,sBaseY+cellH/2+6);
+    ctx.fillStyle='#555';ctx.font='10px sans-serif';
+    ctx.fillText(i,x+cellW/2,sBaseY+cellH+14);
+  }
+  // frequency comparison
+  drawFreqComp(st,pCount);
+  // result indices
+  if(st.result.length>0){
+    const resY=sBaseY+cellH+80;
+    ctx.fillStyle='#888';ctx.font='13px sans-serif';ctx.textAlign='center';
+    ctx.fillText('找到的起始索引:',W/2,resY-5);
+    const rCellW=40,rGap=4;
+    const rTotalW=st.result.length*(rCellW+rGap)-rGap;
+    const rOffX=(W-rTotalW)/2;
+    for(let j=0;j<st.result.length;j++){
+      const x=rOffX+j*(rCellW+rGap);
+      ctx.fillStyle='#1a3a2a';ctx.strokeStyle='#16c79a';ctx.lineWidth=1;
+      roundRect(ctx,x,resY,rCellW,30,4);ctx.fill();ctx.stroke();
+      ctx.fillStyle='#16c79a';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+      ctx.fillText(st.result[j],x+rCellW/2,resY+20);
+    }
+  }
+  if(st.type==='end'){
+    ctx.fillStyle='#ffd700';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillText('结果: ['+st.result.join(', ')+']',W/2,H-15);
+  }
+}
+
+function drawFreqComp(st,pCount){
+  const startY=sBaseY+cellH+30;
+  ctx.fillStyle='#888';ctx.font='13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('频率对比 (p vs 窗口):',50,startY);
+  const allChars=[...new Set([...Object.keys(pCount),...Object.keys(st.sCount)])].sort();
+  let px=50,py=startY+16;
+  const uniqueChars=Object.keys(pCount).length;
+  for(const ch of allChars){
+    const need=pCount[ch]||0,have=st.sCount[ch]||0;
+    const ok=need===have;
+    ctx.fillStyle=ok?'#1a3a2a':'#3a1a1a';
+    ctx.strokeStyle=ok?'#16c79a':'#e94560';ctx.lineWidth=1;
+    roundRect(ctx,px,py,80,28,4);ctx.fill();ctx.stroke();
+    ctx.fillStyle=ok?'#16c79a':'#e94560';ctx.font='12px sans-serif';ctx.textAlign='left';
+    ctx.fillText(`'${ch}': p=${need} w=${have}`,px+5,py+19);
+    px+=88;
+    if(px>W-100){px=50;py+=34;}
+  }
+  // match count
+  ctx.fillStyle=st.matchCount===uniqueChars?'#16c79a':'#e94560';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+  ctx.fillText(`matchCount = ${st.matchCount} / ${uniqueChars}${st.matchCount===uniqueChars?' ✓ 完全匹配':''}`,W/2,py+40);
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();}
+
+function updateInfo(){
+  const s=cur<0?null:steps[cur];
+  document.querySelector('#stepInfo .stepNum').textContent=`步骤 ${cur+1}/${steps.length}`;
+  document.querySelector('#stepInfo .stepDesc').textContent=s?s.desc:'点击「播放」或「步骤前进」开始演示';
+}
+
+function nextStep(){if(cur<steps.length-1){cur++;draw();updateInfo();}else stopPlay();}
+function prevStep(){if(cur>=0){cur--;draw();updateInfo();}}
+function reset(){stopPlay();cur=-1;draw();updateInfo();}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(cur>=steps.length-1){stopPlay();return;}nextStep();},+document.getElementById('speed').value);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+draw();updateInfo();
+</script>
+</body>
+</html>

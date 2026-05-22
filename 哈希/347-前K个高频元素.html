@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>347 - 前K个高频元素</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.header{width:100%;background:linear-gradient(135deg,#16213e,#0f3460);padding:24px 0;text-align:center;border-bottom:2px solid #e94560}
+.header h1{font-size:28px;color:#e94560;margin-bottom:6px}
+.header p{color:#aaa;font-size:14px}
+.example{background:#16213e;border-radius:12px;padding:18px 28px;margin:20px auto;max-width:800px;border:1px solid #333;width:90%}
+.example h3{color:#16c79a;margin-bottom:8px;font-size:16px}
+.example pre{color:#ccc;font-size:14px;line-height:1.6;white-space:pre-wrap}
+.canvas-wrap{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:12px auto;max-width:1100px;width:95%}
+.canvas-box{background:#16213e;border-radius:12px;border:1px solid #333;overflow:hidden;flex:1;min-width:320px;max-width:540px}
+.canvas-box h3{text-align:center;padding:10px;color:#16c79a;font-size:15px;border-bottom:1px solid #333}
+canvas{display:block;margin:0 auto}
+.full-box{background:#16213e;border-radius:12px;border:1px solid #333;margin:12px auto;max-width:1100px;width:95%;overflow:hidden}
+.full-box h3{text-align:center;padding:10px;color:#16c79a;font-size:15px;border-bottom:1px solid #333}
+.desc-panel{background:#16213e;border-radius:12px;padding:16px 24px;margin:12px auto;max-width:1100px;width:95%;border:1px solid #333;min-height:60px}
+.desc-panel .step-counter{color:#e94560;font-size:13px;margin-bottom:6px}
+.desc-panel .step-text{color:#eee;font-size:15px;line-height:1.6}
+.controls{display:flex;gap:12px;justify-content:center;margin:16px auto;flex-wrap:wrap}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:8px;padding:10px 22px;font-size:15px;cursor:pointer;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+.controls button:active{transform:scale(.95)}
+.spacer{height:30px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>LeetCode 347 - 前K个高频元素</h1>
+  <p>Top K Frequent Elements | 频率统计 + 最小堆</p>
+</div>
+<div class="example">
+  <h3>示例</h3>
+  <pre>输入：nums = [1,1,1,2,2,3], k = 2
+输出：[1,2]
+解释：1 出现 3 次，2 出现 2 次，3 出现 1 次，前 2 个高频元素为 [1,2]</pre>
+</div>
+<div class="canvas-wrap">
+  <div class="canvas-box">
+    <h3>频率统计</h3>
+    <canvas id="freqCanvas" width="500" height="300"></canvas>
+  </div>
+  <div class="canvas-box">
+    <h3>最小堆（容量 K=2）</h3>
+    <canvas id="heapCanvas" width="500" height="300"></canvas>
+  </div>
+</div>
+<div class="full-box">
+  <h3>结果输出</h3>
+  <canvas id="resultCanvas" width="1060" height="100"></canvas>
+</div>
+<div class="desc-panel">
+  <div class="step-counter" id="stepCounter">步骤 0 / 0</div>
+  <div class="step-text" id="stepText">点击「播放」或「步骤前进」开始动画</div>
+</div>
+<div class="controls">
+  <button onclick="reset()">⏮ 重置</button>
+  <button onclick="prevStep()">◀ 步骤后退</button>
+  <button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+  <button onclick="nextStep()">步骤前进 ▶</button>
+</div>
+<div class="spacer"></div>
+
+<script>
+const nums=[1,1,1,2,2,3],K=2;
+const fCtx=document.getElementById('freqCanvas').getContext('2d');
+const hCtx=document.getElementById('heapCanvas').getContext('2d');
+const rCtx=document.getElementById('resultCanvas').getContext('2d');
+const C={bg:'#1a1a2e',card:'#16213e',accent:'#e94560',hi:'#16c79a',text:'#eee',dim:'#555',found:'#ffdd57',bar:'#3498db'};
+
+// Min-heap implementation
+class MinHeap{
+  constructor(cap){this.data=[];this.cap=cap;}
+  size(){return this.data.length;}
+  peek(){return this.data[0]||null;}
+  push(val){
+    this.data.push(val);this._up(this.data.length-1);
+    if(this.data.length>this.cap)this.pop();
+  }
+  pop(){
+    const top=this.data[0];const last=this.data.pop();
+    if(this.data.length>0){this.data[0]=last;this._down(0);}
+    return top;
+  }
+  _up(i){while(i>0){const p=(i-1)>>1;if(this.data[p][1]<=this.data[i][1])break;[this.data[p],this.data[i]]=[this.data[i],this.data[p]];i=p;}}
+  _down(i){const n=this.data.length;while(true){let m=i,l=2*i+1,r=2*i+2;if(l<n&&this.data[l][1]<this.data[m][1])m=l;if(r<n&&this.data[r][1]<this.data[m][1])m=r;if(m===i)break;[this.data[m],this.data[i]]=[this.data[i],this.data[m]];i=m;}}
+  toArray(){return[...this.data];}
+}
+
+function genSteps(){
+  const steps=[];
+  const freq={};
+  // Phase 1: count frequencies
+  steps.push({desc:'阶段一：统计每个元素的出现频率',phase:'freq',freq:{},heap:[],curNum:null,result:[],buildFreq:true});
+  for(const n of nums){
+    freq[n]=(freq[n]||0)+1;
+    steps.push({desc:`统计频率：${n} 出现 ${freq[n]} 次`,phase:'freq',freq:{...freq},heap:[],curNum:n,result:[],buildFreq:true});
+  }
+  // Phase 2: build min-heap of size K
+  const heap=new MinHeap(K);
+  const entries=Object.entries(freq).map(([k,v])=>[Number(k),v]);
+  steps.push({desc:'阶段二：用最小堆维护前 K 个高频元素（堆容量 = K = 2）',phase:'heap',freq:{...freq},heap:heap.toArray(),curNum:null,result:[],buildFreq:false});
+  for(const entry of entries){
+    heap.push(entry);
+    const hArr=heap.toArray();
+    if(heap.size()<=K){
+      steps.push({desc:`将 (${entry[0]}, 频率${entry[1]}) 加入堆，堆大小 ${heap.size()} ≤ K，不弹出`,phase:'heap',freq:{...freq},heap:[...hArr],curNum:entry[0],result:[],buildFreq:false});
+    } else {
+      const popped=heap.pop();
+      steps.push({desc:`将 (${entry[0]}, 频率${entry[1]}) 加入堆，堆大小 > K，弹出最小频率 (${popped[0]}, 频率${popped[1]})`,phase:'heap',freq:{...freq},heap:[...heap.toArray()],curNum:entry[0],popped,result:[],buildFreq:false});
+    }
+  }
+  // Phase 3: extract result
+  const result=heap.toArray().sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+  steps.push({desc:`阶段三：从堆中提取结果，按频率降序排列 → [${result.join(', ')}]`,phase:'result',freq:{...freq},heap:[...heap.toArray()],curNum:null,result,buildFreq:false});
+  return steps;
+}
+
+let steps=genSteps(),curStep=0,playing=false,timer=null;
+
+function rr(c,x,y,w,h,r,f,s){c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(f)c.fill();if(s)c.stroke();}
+
+function drawFreq(step){
+  const ctx=fCtx;ctx.clearRect(0,0,500,300);
+  const entries=Object.entries(step.freq);
+  if(!entries.length){ctx.fillStyle=C.dim;ctx.font='15px sans-serif';ctx.textAlign='center';ctx.fillText('（统计中...）',250,150);return;}
+  entries.sort((a,b)=>Number(a[0])-Number(b[0]));
+  const maxFreq=Math.max(...entries.map(e=>e[1]));
+  const barW=60,maxBarH=160,gap=30;
+  const totalW=entries.length*(barW+gap)-gap;
+  const sx=(500-totalW)/2,baseY=260;
+  entries.forEach(([num,freq],i)=>{
+    const x=sx+i*(barW+gap);
+    const h=maxBarH*(freq/maxFreq);
+    const isCur=step.curNum===Number(num);
+    // bar
+    const grad=ctx.createLinearGradient(x,baseY-h,x,baseY);
+    grad.addColorStop(0,isCur?C.accent:C.bar);grad.addColorStop(1,isCur?'#a02040':'#1a5276');
+    ctx.fillStyle=grad;
+    rr(ctx,x,baseY-h,barW,h,6,true,false);
+    ctx.strokeStyle=isCur?C.accent:C.dim;ctx.lineWidth=isCur?2:1;
+    rr(ctx,x,baseY-h,barW,h,6,false,true);
+    // freq label
+    ctx.fillStyle=isCur?C.accent:C.text;ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+    ctx.fillText(freq,x+barW/2,baseY-h-8);
+    // num label
+    ctx.fillStyle=C.dim;ctx.font='14px sans-serif';
+    ctx.fillText(num,x+barW/2,baseY+18);
+  });
+}
+
+function drawHeap(step){
+  const ctx=hCtx;ctx.clearRect(0,0,500,300);
+  const heap=step.heap;
+  if(!heap.length){ctx.fillStyle=C.dim;ctx.font='15px sans-serif';ctx.textAlign='center';ctx.fillText('（堆为空）',250,150);return;}
+  // Draw as binary tree
+  const nodeW=80,nodeH=40;
+  const levels=Math.ceil(Math.log2(heap.length+1));
+  const drawNode=(idx,x,y)=>{
+    if(idx>=heap.length)return;
+    const[num,freq]=heap[idx];
+    const isCur=step.curNum===num;
+    // draw edges first
+    const left=2*idx+1,right=2*idx+2;
+    if(left<heap.length){
+      const childX=x-Math.pow(2,levels-Math.floor(Math.log2(idx+1))-2)*50;
+      const childY=y+70;
+      ctx.strokeStyle=C.dim;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y+nodeH/2);ctx.lineTo(childX,childY);ctx.stroke();
+      drawNode(left,childX,childY);
+    }
+    if(right<heap.length){
+      const childX=x+Math.pow(2,levels-Math.floor(Math.log2(idx+1))-2)*50;
+      const childY=y+70;
+      ctx.strokeStyle=C.dim;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y+nodeH/2);ctx.lineTo(childX,childY);ctx.stroke();
+      drawNode(right,childX,childY);
+    }
+    // node
+    ctx.fillStyle=isCur?C.accent:C.card;ctx.strokeStyle=isCur?C.accent:C.hi;ctx.lineWidth=isCur?3:2;
+    rr(ctx,x-nodeW/2,y,nodeW,nodeH,8,true,true);
+    ctx.fillStyle=isCur?'#fff':C.text;ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(`${num}(${freq})`,x,y+nodeH/2);
+  };
+  const rootX=250,rootY=30;
+  drawNode(0,rootX,rootY);
+  // popped indicator
+  if(step.popped){
+    ctx.fillStyle=C.accent;ctx.font='italic 13px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`弹出: (${step.popped[0]}, 频率${step.popped[1]})`,250,280);
+  }
+}
+
+function drawResult(step){
+  const ctx=rCtx;ctx.clearRect(0,0,1060,100);
+  if(!step.result.length){
+    ctx.fillStyle=C.dim;ctx.font='15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('结果将在此显示...',530,50);return;
+  }
+  const cw=100,ch=50,gap=20;
+  const tw=step.result.length*(cw+gap)-gap;
+  const sx=(1060-tw)/2,sy=25;
+  ctx.fillStyle=C.hi;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('输出',1060/2,14);
+  step.result.forEach((v,i)=>{
+    const x=sx+i*(cw+gap);
+    ctx.fillStyle=C.found;ctx.strokeStyle='#ffdd57';ctx.lineWidth=2;
+    rr(ctx,x,sy,cw,ch,8,true,true);
+    ctx.fillStyle='#1a1a2e';ctx.font='bold 24px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(v,x+cw/2,sy+ch/2);
+  });
+}
+
+function render(){
+  const step=steps[curStep];
+  drawFreq(step);drawHeap(step);drawResult(step);
+  document.getElementById('stepCounter').textContent=`步骤 ${curStep} / ${steps.length-1}`;
+  document.getElementById('stepText').textContent=step.desc;
+}
+
+function reset(){stopPlay();curStep=0;render();}
+function nextStep(){if(curStep<steps.length-1){curStep++;render();}else stopPlay();}
+function prevStep(){if(curStep>0){curStep--;render();}}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)nextStep();else stopPlay();},1200);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+render();
+</script>
+</body>
+</html>

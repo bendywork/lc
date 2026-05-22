@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>136 - 只出现一次的数字</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:'PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.header{width:100%;background:linear-gradient(135deg,#16213e,#0f3460);padding:24px 0;text-align:center;border-bottom:2px solid #e94560}
+.header h1{font-size:28px;color:#e94560;margin-bottom:6px}
+.header p{color:#aaa;font-size:14px}
+.example{background:#16213e;border-radius:12px;padding:18px 28px;margin:20px auto;max-width:800px;border:1px solid #333;width:90%}
+.example h3{color:#16c79a;margin-bottom:8px;font-size:16px}
+.example pre{color:#ccc;font-size:14px;line-height:1.6;white-space:pre-wrap}
+.canvas-box{background:#16213e;border-radius:12px;border:1px solid #333;margin:12px auto;max-width:1100px;width:95%;overflow:hidden}
+.canvas-box h3{text-align:center;padding:10px;color:#16c79a;font-size:15px;border-bottom:1px solid #333}
+canvas{display:block;margin:0 auto}
+.desc-panel{background:#16213e;border-radius:12px;padding:16px 24px;margin:12px auto;max-width:1100px;width:95%;border:1px solid #333;min-height:60px}
+.desc-panel .step-counter{color:#e94560;font-size:13px;margin-bottom:6px}
+.desc-panel .step-text{color:#eee;font-size:15px;line-height:1.6}
+.controls{display:flex;gap:12px;justify-content:center;margin:16px auto;flex-wrap:wrap}
+.controls button{background:#0f3460;color:#eee;border:1px solid #e94560;border-radius:8px;padding:10px 22px;font-size:15px;cursor:pointer;transition:all .2s}
+.controls button:hover{background:#e94560;color:#fff}
+.controls button:active{transform:scale(.95)}
+.spacer{height:30px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>LeetCode 136 - 只出现一次的数字</h1>
+  <p>Single Number | XOR 异或法</p>
+</div>
+<div class="example">
+  <h3>示例</h3>
+  <pre>输入：nums = [4,1,2,1,2]
+输出：4
+解释：4 ^ 1 ^ 2 ^ 1 ^ 2 = 4（异或运算，相同为0，不同为1）</pre>
+</div>
+<div class="canvas-box">
+  <h3>数组与 XOR 运算过程</h3>
+  <canvas id="mainCanvas" width="1060" height="480"></canvas>
+</div>
+<div class="desc-panel">
+  <div class="step-counter" id="stepCounter">步骤 0 / 0</div>
+  <div class="step-text" id="stepText">点击「播放」或「步骤前进」开始动画</div>
+</div>
+<div class="controls">
+  <button onclick="reset()">⏮ 重置</button>
+  <button onclick="prevStep()">◀ 步骤后退</button>
+  <button id="btnPlay" onclick="togglePlay()">▶ 播放</button>
+  <button onclick="nextStep()">步骤前进 ▶</button>
+</div>
+<div class="spacer"></div>
+
+<script>
+const nums=[4,1,2,1,2];
+const ctx=document.getElementById('mainCanvas').getContext('2d');
+const W=1060,H=480;
+const C={bg:'#1a1a2e',card:'#16213e',accent:'#e94560',hi:'#16c79a',text:'#eee',dim:'#555',found:'#ffdd57',xor:'#9b59b6'};
+
+function toBin(n){return (n>>>0).toString(2).padStart(8,'0');}
+function xorBin(a,b){
+  const ba=toBin(a),bb=toBin(b),r=[];
+  for(let i=0;i<8;i++) r.push(ba[i]===bb[i]?'0':'1');
+  return r.join('');
+}
+
+function genSteps(){
+  const steps=[];
+  let result=0;
+  steps.push({desc:'初始状态：result = 0，遍历数组逐个进行异或运算',curIdx:-1,result,showXor:false});
+  for(let i=0;i<nums.length;i++){
+    const prev=result;
+    const xorResult=prev^nums[i];
+    steps.push({desc:`取出 nums[${i}] = ${nums[i]}，即将执行 ${prev} ⊕ ${nums[i]}`,curIdx:i,result:prev,operand:nums[i],showXor:false});
+    steps.push({desc:`${prev} ⊕ ${nums[i]} = ${xorResult}（二进制：${toBin(prev)} ⊕ ${toBin(nums[i])} = ${toBin(xorResult)}）`,curIdx:i,result:xorResult,prevResult:prev,operand:nums[i],showXor:true});
+    result=xorResult;
+  }
+  steps.push({desc:`异或完成！结果 = ${result}，只出现一次的数字是 ${result}`,curIdx:-1,result,showXor:false,done:true});
+  return steps;
+}
+
+let steps=genSteps(),curStep=0,playing=false,timer=null;
+
+function rr(c,x,y,w,h,r,f,s){c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(f)c.fill();if(s)c.stroke();}
+
+function drawBinRow(cx,x,y,val,label,highlight,color){
+  const bits=toBin(val),cw=40,ch=32,gap=4,tw=8*cw+7*gap,sx=cx-tw/2;
+  cx.fillStyle=color||C.dim;cx.font='bold 12px sans-serif';cx.textAlign='center';
+  cx.fillText(label,cx-tw/2-30,y+ch/2);
+  for(let i=0;i<8;i++){
+    const bx=sx+i*(cw+gap);
+    cx.fillStyle=highlight&&highlight[i]==='1'?C.accent:C.card;
+    cx.strokeStyle=C.dim;cx.lineWidth=1;
+    rr(cx,bx,y,cw,ch,4,true,true);
+    cx.fillStyle=highlight&&highlight[i]==='1'?'#fff':C.text;
+    cx.font='bold 16px monospace';cx.textAlign='center';cx.textBaseline='middle';
+    cx.fillText(bits[i],bx+cw/2,y+ch/2);
+  }
+  cx.fillStyle=color||C.text;cx.font='bold 14px sans-serif';
+  cx.fillText(`= ${val}`,cx+tw/2+30,y+ch/2);
+}
+
+function render(){
+  const step=steps[curStep];
+  ctx.clearRect(0,0,W,H);
+
+  // Draw array at top
+  const n=nums.length,cw=80,ch=56,gap=14,tw=n*cw+(n-1)*gap,sx=(W-tw)/2,sy=20;
+  ctx.fillStyle=C.hi;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('数组',W/2,14);
+  for(let i=0;i<n;i++){
+    const x=sx+i*(cw+gap);
+    const isCur=step.curIdx===i;
+    ctx.fillStyle=isCur?C.accent:C.card;ctx.strokeStyle=isCur?C.accent:C.dim;ctx.lineWidth=isCur?3:1;
+    rr(ctx,x,sy,cw,ch,8,true,true);
+    ctx.fillStyle=isCur?'#fff':C.text;ctx.font='bold 22px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(nums[i],x+cw/2,sy+ch/2);
+    ctx.fillStyle=C.dim;ctx.font='12px sans-serif';ctx.fillText(`[${i}]`,x+cw/2,sy+ch+14);
+  }
+
+  // XOR operation area
+  const opY=160;
+  if(step.showXor){
+    const prev=step.prevResult,op=step.operand,res=step.result;
+    const xorBits=xorBin(prev,op);
+    // Show XOR visual
+    drawBinRow(ctx,W/2,opY,prev,'A',toBin(prev).split(''),C.text);
+    // XOR symbol
+    ctx.fillStyle=C.accent;ctx.font='bold 28px sans-serif';ctx.textAlign='center';
+    ctx.fillText('⊕',W/2,opY+50);
+    drawBinRow(ctx,W/2,opY+68,op,'B',toBin(op).split(''),C.hi);
+    // result line
+    ctx.strokeStyle=C.found;ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(W/2-200,opY+112);ctx.lineTo(W/2+200,opY+112);ctx.stroke();
+    drawBinRow(ctx,W/2,opY+122,res,'R',xorBits.split(''),C.found);
+  } else {
+    // Just show current result
+    ctx.fillStyle=C.dim;ctx.font='16px sans-serif';ctx.textAlign='center';
+    if(step.curIdx>=0){
+      ctx.fillText(`当前 result = ${step.result}`,W/2,opY+20);
+      ctx.fillStyle=C.accent;ctx.font='bold 16px sans-serif';
+      ctx.fillText(`即将与 nums[${step.curIdx}] = ${step.operand} 进行异或`,W/2,opY+50);
+    } else if(step.done){
+      ctx.fillStyle=C.found;ctx.font='bold 36px sans-serif';
+      ctx.fillText(`最终结果: ${step.result}`,W/2,opY+40);
+    } else {
+      ctx.fillText('result = 0（初始值）',W/2,opY+20);
+    }
+  }
+
+  // Result accumulator at bottom
+  const accY=400;
+  ctx.fillStyle=C.hi;ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('异或累积结果',W/2,accY-6);
+  const rVal=step.result;
+  ctx.fillStyle=step.done?C.found:C.card;ctx.strokeStyle=step.done?'#ffdd57':C.hi;ctx.lineWidth=2;
+  rr(ctx,W/2-100,accY+4,200,50,10,true,true);
+  ctx.fillStyle=step.done?'#1a1a2e':C.text;ctx.font='bold 26px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(step.done?`${rVal} (唯一数字)`:rVal,W/2,accY+29);
+
+  document.getElementById('stepCounter').textContent=`步骤 ${curStep} / ${steps.length-1}`;
+  document.getElementById('stepText').textContent=step.desc;
+}
+
+function reset(){stopPlay();curStep=0;render();}
+function nextStep(){if(curStep<steps.length-1){curStep++;render();}else stopPlay();}
+function prevStep(){if(curStep>0){curStep--;render();}}
+function togglePlay(){if(playing)stopPlay();else startPlay();}
+function startPlay(){playing=true;document.getElementById('btnPlay').textContent='⏸ 暂停';timer=setInterval(()=>{if(curStep<steps.length-1)nextStep();else stopPlay();},1400);}
+function stopPlay(){playing=false;document.getElementById('btnPlay').textContent='▶ 播放';clearInterval(timer);timer=null;}
+
+render();
+</script>
+</body>
+</html>
