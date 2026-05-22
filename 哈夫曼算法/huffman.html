@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>哈夫曼算法 - 可视化动画</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-height:100vh;overflow-x:hidden}
+.header{background:#16213e;padding:20px 30px;border-bottom:2px solid #e94560}
+.header h1{font-size:24px;color:#e94560}
+.header p{font-size:14px;color:#888;margin-top:4px}
+.container{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px;max-width:1400px;margin:0 auto}
+.panel{background:#16213e;border-radius:12px;padding:20px;border:1px solid #333}
+.panel h2{font-size:16px;color:#16c79a;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:8px}
+canvas{width:100%;border-radius:8px;background:#0f3460;display:block}
+.controls{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:16px 24px;background:#16213e;border-radius:12px;border:1px solid #333;flex-wrap:wrap}
+.btn{padding:8px 18px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:all .2s}
+.btn:hover{transform:scale(1.05)}
+.btn-play{background:#16c79a;color:#1a1a2e}
+.btn-pause{background:#e94560;color:#fff}
+.btn-reset{background:#533483;color:#fff}
+.btn-step{background:#0f3460;color:#e0e0e0;border:1px solid #444}
+.step-info{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;color:#aaa}
+.step-info span{color:#16c79a;font-weight:600}
+.speed-control{display:flex;align-items:center;gap:6px;font-size:13px;color:#aaa}
+.speed-control input{width:80px;accent-color:#16c79a}
+.desc-panel{grid-column:1/-1;background:#16213e;border-radius:12px;padding:16px 20px;border:1px solid #333}
+.desc-panel h3{font-size:14px;color:#e94560;margin-bottom:6px}
+.desc-panel p{font-size:13px;line-height:1.6;color:#ccc}
+.freq-table{width:100%;border-collapse:collapse;margin-top:8px}
+.freq-table th,.freq-table td{padding:6px 12px;text-align:center;border:1px solid #333;font-size:13px}
+.freq-table th{background:#0f3460;color:#16c79a}
+.freq-table td.highlight{background:#e9456044;color:#fff}
+.codes-table{width:100%;border-collapse:collapse;margin-top:8px}
+.codes-table th,.codes-table td{padding:6px 12px;text-align:center;border:1px solid #333;font-size:13px}
+.codes-table th{background:#0f3460;color:#16c79a}
+.codes-table td.code{font-family:monospace;color:#ffd700;font-weight:600}
+.encode-panel{margin-top:12px;padding:12px;background:#0f3460;border-radius:8px;font-size:13px;line-height:1.8}
+.encode-panel .bit{display:inline-block;padding:2px 5px;margin:1px;border-radius:3px;font-family:monospace;font-size:12px}
+.encode-panel .bit-0{background:#16c79a33;color:#16c79a}
+.encode-panel .bit-1{background:#e9456033;color:#e94560}
+.encode-panel .char-label{display:inline-block;padding:2px 6px;margin:1px;border-radius:3px;background:#53348344;color:#c9b1ff;font-weight:600}
+.stats-bar{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap}
+.stat{padding:8px 16px;background:#0f3460;border-radius:8px;font-size:13px}
+.stat .val{color:#ffd700;font-weight:700;font-size:18px}
+.stat .label{color:#888;font-size:11px}
+.full-width{grid-column:1/-1}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>🌲 哈夫曼算法 (Huffman Coding)</h1>
+<p>贪心策略构建最优前缀编码树 — 数据结构可视化 + 步骤动画</p>
+</div>
+
+<div class="controls">
+<button class="btn btn-play" onclick="play()">▶ 播放</button>
+<button class="btn btn-pause" onclick="pause()">⏸ 暂停</button>
+<button class="btn btn-step" onclick="stepForward()">步骤前进 →</button>
+<button class="btn btn-step" onclick="stepBack()">← 步骤后退</button>
+<button class="btn btn-reset" onclick="reset()">⏮ 重置</button>
+<div class="speed-control">
+<span>速度:</span>
+<input type="range" min="1" max="10" value="3" id="speed" oninput="updateSpeed()">
+<span id="speedLabel">3x</span>
+</div>
+<div class="step-info">
+步骤: <span id="stepCur">0</span> / <span id="stepTotal">0</span>
+</div>
+</div>
+
+<div class="container">
+<div class="panel">
+<h2>📊 频率统计</h2>
+<table class="freq-table" id="freqTable"></table>
+</div>
+<div class="panel">
+<h2>🔑 编码表</h2>
+<table class="codes-table" id="codesTable"></table>
+</div>
+
+<div class="panel full-width">
+<h2>🌲 哈夫曼树构建过程</h2>
+<canvas id="treeCanvas" height="400"></canvas>
+</div>
+
+<div class="panel full-width">
+<h2>📝 编码结果</h2>
+<div class="encode-panel" id="encodePanel"></div>
+<div class="stats-bar" id="statsBar"></div>
+</div>
+
+<div class="desc-panel">
+<h3>💡 当前步骤说明</h3>
+<p id="descText">点击「播放」开始观看哈夫曼树构建过程</p>
+</div>
+</div>
+
+<script>
+const TEXT = "abbcccddddeeeee";
+const CHARS = [...TEXT];
+const FREQ = {};
+CHARS.forEach(c => FREQ[c] = (FREQ[c]||0)+1);
+const freqList = Object.entries(FREQ).sort((a,b)=>a[1]-b[1]);
+
+// Build steps
+const steps = [];
+function buildSteps(){
+  steps.length = 0;
+  // Step 0: show frequency
+  steps.push({type:'freq',desc:`统计字符频率：共 ${freqList.length} 种字符，总长度 ${TEXT.length}`});
+
+  // Simulate tree building
+  let heap = freqList.map(([ch,fr])=>({char:ch,freq:fr,left:null,right:null,id:ch}));
+  let nextId = 1;
+  let trees = {}; // id -> node
+  heap.forEach(h => { trees[h.id] = h; });
+  let currentHeap = [...heap];
+  let round = 0;
+
+  while(currentHeap.length > 1){
+    currentHeap.sort((a,b)=>a.freq-b.freq);
+    let left = currentHeap.shift();
+    let right = currentHeap.shift();
+    let newId = `N${nextId++}`;
+    let merged = {char:null, freq:left.freq+right.freq, left, right, id:newId};
+    trees[newId] = merged;
+    currentHeap.push(merged);
+    round++;
+    steps.push({
+      type:'merge',
+      round,
+      left, right, merged,
+      heap: currentHeap.map(n=>n.id),
+      desc:`第${round}轮合并：取出频率最小的两个节点 [${nodeLabel(left)}:${left.freq}] + [${nodeLabel(right)}:${right.freq}] = 新节点 [${merged.freq}]，放回堆中`
+    });
+  }
+
+  // Final tree built
+  steps.push({type:'done', tree:currentHeap[0], desc:`哈夫曼树构建完成！根节点频率 = ${currentHeap[0].freq}`});
+
+  // Show codes
+  const codes = {};
+  function genCodes(node, code){
+    if(!node.left && !node.right){ codes[node.char]=code||'0'; return; }
+    genCodes(node.left, code+'0');
+    genCodes(node.right, code+'1');
+  }
+  genCodes(currentHeap[0],'');
+  steps.push({type:'codes', codes, desc:`生成编码表：高频字符用更短的编码，实现最优前缀编码`});
+
+  // Encoding
+  const encoded = CHARS.map(c=>codes[c]).join('');
+  steps.push({type:'encode', codes, encoded, desc:`编码完成：${TEXT.length*8} bits → ${encoded.length} bits，压缩率 ${((1-encoded.length/(TEXT.length*8))*100).toFixed(1)}%`});
+}
+
+function nodeLabel(n){ return n.char ? `'${n.char}'` : n.id; }
+
+buildSteps();
+
+let currentStep = 0;
+let playing = false;
+let timer = null;
+let speed = 3;
+
+function updateSpeed(){ speed=+document.getElementById('speed').value; document.getElementById('speedLabel').textContent=speed+'x'; }
+
+function render(step){
+  document.getElementById('stepCur').textContent = currentStep;
+  document.getElementById('stepTotal').textContent = steps.length-1;
+  document.getElementById('descText').textContent = step.desc;
+
+  renderFreqTable(step);
+  renderCodesTable(step);
+  renderTree(step);
+  renderEncode(step);
+}
+
+function renderFreqTable(step){
+  const t = document.getElementById('freqTable');
+  let h = '<tr><th>字符</th><th>频率</th><th>占比</th></tr>';
+  freqList.forEach(([ch,fr])=>{
+    const hl = (step.type==='freq') ? 'highlight' : '';
+    h+=`<tr><td class="${hl}">'${ch}'</td><td>${fr}</td><td>${(fr/TEXT.length*100).toFixed(1)}%</td></tr>`;
+  });
+  t.innerHTML = h;
+}
+
+function renderCodesTable(step){
+  const t = document.getElementById('codesTable');
+  if(step.type==='codes'||step.type==='encode'){
+    const codes = step.codes;
+    let h = '<tr><th>字符</th><th>频率</th><th>编码</th><th>码长</th></tr>';
+    Object.entries(codes).sort((a,b)=>a[1].length-b[1].length).forEach(([ch,code])=>{
+      h+=`<tr><td>'${ch}'</td><td>${FREQ[ch]}</td><td class="code">${code}</td><td>${code.length}</td></tr>`;
+    });
+    t.innerHTML = h;
+  } else {
+    t.innerHTML = '<tr><th colspan="4" style="color:#666">树构建完成后显示编码表</th></tr>';
+  }
+}
+
+function renderTree(step){
+  const canvas = document.getElementById('treeCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio||1;
+  canvas.width = canvas.clientWidth * dpr;
+  canvas.height = 400 * dpr;
+  ctx.scale(dpr,dpr);
+  const W = canvas.clientWidth, H = 400;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0f3460';
+  ctx.fillRect(0,0,W,H);
+
+  // Collect nodes to draw based on step type
+  let rootNodes = [];
+  if(step.type==='freq'){
+    rootNodes = freqList.map(([ch,fr])=>({char:ch,freq:fr,left:null,right:null,id:ch}));
+  } else if(step.type==='merge'){
+    // Rebuild tree state up to this round
+    let simHeap = freqList.map(([ch,fr])=>({char:ch,freq:fr,left:null,right:null,id:ch}));
+    let nid=1;
+    for(let i=0;i<step.round;i++){
+      simHeap.sort((a,b)=>a.freq-b.freq);
+      let l=simHeap.shift(), r=simHeap.shift();
+      simHeap.push({char:null,freq:l.freq+r.freq,left:l,right:r,id:`N${nid++}`});
+    }
+    rootNodes = simHeap;
+  } else if(step.type==='done'||step.type==='codes'||step.type==='encode'){
+    rootNodes = [step.tree];
+  }
+
+  if(!rootNodes.length) return;
+
+  // Layout trees
+  const totalWidth = W - 40;
+  const treeWidth = totalWidth / rootNodes.length;
+  rootNodes.forEach((root,i)=>{
+    const cx = 20 + treeWidth*i + treeWidth/2;
+    const cy = 40;
+    drawTreeNode(ctx, root, cx, cy, treeWidth*0.45, 1, step);
+  });
+}
+
+function drawTreeNode(ctx, node, x, y, spread, depth, step){
+  if(!node) return;
+  const maxDepth = 5;
+  if(depth > maxDepth) return;
+
+  const nodeR = 22;
+
+  // Draw children first
+  if(node.left || node.right){
+    const childY = y + 60;
+    const childSpread = spread * 0.55;
+    const lx = x - spread;
+    const rx = x + spread;
+
+    if(node.left){
+      ctx.beginPath();
+      ctx.moveTo(x, y+nodeR);
+      ctx.lineTo(lx, childY-nodeR);
+      ctx.strokeStyle='#16c79a88';
+      ctx.lineWidth=2;
+      ctx.stroke();
+      // Label "0"
+      ctx.fillStyle='#16c79a';
+      ctx.font='bold 11px sans-serif';
+      ctx.fillText('0', (x+lx)/2-8, (y+childY)/2-4);
+      drawTreeNode(ctx, node.left, lx, childY, childSpread, depth+1, step);
+    }
+    if(node.right){
+      ctx.beginPath();
+      ctx.moveTo(x, y+nodeR);
+      ctx.lineTo(rx, childY-nodeR);
+      ctx.strokeStyle='#e9456088';
+      ctx.lineWidth=2;
+      ctx.stroke();
+      // Label "1"
+      ctx.fillStyle='#e94560';
+      ctx.font='bold 11px sans-serif';
+      ctx.fillText('1', (x+rx)/2+2, (y+childY)/2-4);
+      drawTreeNode(ctx, node.right, rx, childY, childSpread, depth+1, step);
+    }
+  }
+
+  // Draw node
+  const isHighlight = step.type==='merge' && (node===step.left||node===step.right);
+  const isMerged = step.type==='merge' && node===step.merged;
+
+  ctx.beginPath();
+  ctx.arc(x, y, nodeR, 0, Math.PI*2);
+  if(isHighlight){
+    ctx.fillStyle='#e94560';
+    ctx.shadowColor='#e94560';
+    ctx.shadowBlur=15;
+  } else if(isMerged){
+    ctx.fillStyle='#ffd700';
+    ctx.shadowColor='#ffd700';
+    ctx.shadowBlur=15;
+  } else if(node.char){
+    ctx.fillStyle='#16c79a';
+    ctx.shadowColor='#16c79a';
+    ctx.shadowBlur=8;
+  } else {
+    ctx.fillStyle='#533483';
+  }
+  ctx.fill();
+  ctx.shadowBlur=0;
+
+  ctx.strokeStyle='#ffffff33';
+  ctx.lineWidth=1.5;
+  ctx.stroke();
+
+  // Label
+  ctx.fillStyle='#fff';
+  ctx.font='bold 12px monospace';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  if(node.char){
+    ctx.fillText(`'${node.char}'`, x, y-4);
+    ctx.font='10px sans-serif';
+    ctx.fillStyle='#ffffffaa';
+    ctx.fillText(`${node.freq}`, x, y+10);
+  } else {
+    ctx.fillText(`${node.freq}`, x, y);
+  }
+}
+
+function renderEncode(step){
+  const panel = document.getElementById('encodePanel');
+  const bar = document.getElementById('statsBar');
+
+  if(step.type==='encode'){
+    const codes = step.codes;
+    let h = '<div>原文: ';
+    CHARS.forEach(c=>{
+      h+=`<span class="char-label">${c}</span>`;
+    });
+    h += '</div><div style="margin-top:6px">编码: ';
+    CHARS.forEach(c=>{
+      const code = codes[c];
+      [...code].forEach(b=>{
+        h+=`<span class="bit bit-${b}">${b}</span>`;
+      });
+      h+=' ';
+    });
+    h += '</div>';
+    panel.innerHTML = h;
+
+    const origBits = TEXT.length*8;
+    const encBits = step.encoded.length;
+    bar.innerHTML = `
+      <div class="stat"><div class="val">${origBits}</div><div class="label">原始 (bits)</div></div>
+      <div class="stat"><div class="val">${encBits}</div><div class="label">编码后 (bits)</div></div>
+      <div class="stat"><div class="val">${((1-encBits/origBits)*100).toFixed(1)}%</div><div class="label">压缩率</div></div>
+      <div class="stat"><div class="val">${(encBits/TEXT.length).toFixed(2)}</div><div class="label">平均码长</div></div>
+    `;
+  } else if(step.type==='codes'){
+    panel.innerHTML = '<span style="color:#888">编码表已生成，下一步将展示编码结果...</span>';
+    bar.innerHTML = '';
+  } else {
+    panel.innerHTML = '<span style="color:#666">等待哈夫曼树构建完成...</span>';
+    bar.innerHTML = '';
+  }
+}
+
+function play(){
+  if(playing) return;
+  playing = true;
+  tick();
+}
+function tick(){
+  if(!playing||currentStep>=steps.length-1){playing=false;return;}
+  currentStep++;
+  render(steps[currentStep]);
+  timer = setTimeout(tick, 1200/speed);
+}
+function pause(){ playing=false; clearTimeout(timer); }
+function stepForward(){
+  pause();
+  if(currentStep<steps.length-1){currentStep++;render(steps[currentStep]);}
+}
+function stepBack(){
+  pause();
+  if(currentStep>0){currentStep--;render(steps[currentStep]);}
+}
+function reset(){
+  pause();
+  currentStep=0;
+  render(steps[0]);
+}
+
+// Init
+render(steps[0]);
+</script>
+</body>
+</html>
